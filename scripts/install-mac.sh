@@ -7,9 +7,8 @@
 #
 # Signing identity: $MAC_SIGN_IDENTITY, else the keychain certificate
 # "Claude Usage Bar Local Signing" if one exists (shared with the token
-# widget), else ad-hoc. Prefer a certificate — Screen Recording permission is
-# tied to the signature, and an ad-hoc one changes on every build, so each
-# rebuild has to be granted again.
+# widget), else ad-hoc. A certificate keeps the signature stable across
+# rebuilds, so macOS keeps treating each build as the same app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,7 +24,6 @@ fi
 SIGN_ID=${SIGN_ID:--}
 export MAC_SIGN_IDENTITY=$SIGN_ID
 
-bash scripts/build-glass-capture.sh
 npx electron-builder --mac dir "--$arch"
 
 pkill -x "$name" 2>/dev/null || true

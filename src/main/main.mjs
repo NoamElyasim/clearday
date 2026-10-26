@@ -1,23 +1,26 @@
-// ClearDay main process: the window, its menus, the tray, login item, and the
-// IPC the renderer uses to reach the task store and the glass capture.
+// ClearDay main process: the window, the tray, the login item, the
+// right-click menu, and the IPC the renderer uses to reach the task store and
+// the app's settings.
 import {
-  app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, powerMonitor,
-  screen, shell, systemPreferences, ipcMain,
+  app, BrowserWindow, Menu, Tray, dialog, nativeImage, nativeTheme, powerMonitor,
+  screen, shell, ipcMain,
 } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import './paths.mjs';
 import * as settings from './settings.mjs';
 import * as store from './store.mjs';
-import * as macCapture from './mac-capture.mjs';
-import { SORTS, SORT_LABELS } from '../shared/model.mjs';
+import { buildTemplate } from './context-menu.mjs';
+import { SORTS, SORT_LABELS, SCHEMA_VERSION } from '../shared/model.mjs';
 
 const DIR = import.meta.dirname;
 const DEFAULT_SIZE = { width: 780, height: 560 };
 const MIN_SIZE = { width: 320, height: 360 };
+// Preferences → Text size, as page zoom so every part of the UI scales together.
+const ZOOM = { small: 0.9, medium: 1, large: 1.12 };
 
 let win = null;
 let tray = null;
-let nativeGlass = null;
 let quitting = false;
 
 // ─── Window placement ────────────────────────────────────────────────────────
@@ -43,12 +46,6 @@ function restoreBounds(saved) {
   return visible ? { x: saved.x, y: saved.y, width, height } : defaultBounds();
 }
 
-function boundsPayload() {
-  const bounds = win.getBounds();
-  const disp = screen.getDisplayMatching(bounds);
-  return { bounds, scaleFactor: disp.scaleFactor };
-}
-
 function createWindow() {
   win = new BrowserWindow({
     ...restoreBounds(settings.get('bounds')),
@@ -56,6 +53,10 @@ function createWindow() {
     minHeight: MIN_SIZE.height,
     frame: false,
     transparent: true,
+    // The desktop behind the window is blurred by macOS; the board's own
+    // background (theme.css, opacity from Preferences) is drawn over it.
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
     resizable: true,
     hasShadow: true,
     show: false,
@@ -66,6 +67,7 @@ function createWindow() {
       preload: path.join(DIR, '..', 'preload.cjs'),
       contextIsolation: true,
       sandbox: true,
+      spellcheck: true,
     },
   });
   if (settings.get('alwaysOnTop')) win.setAlwaysOnTop(true, 'floating');
@@ -94,48 +96,37 @@ function createWindow() {
   };
   win.on('moved', saveBounds);
   win.on('resized', saveBounds);
-
-  const sendBounds = (force = false) => {
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send('glass:bounds', boundsPayload());
-    if (nativeGlass) nativeGlass.track(win.getBounds(), force === true);
-  };
-  win.on('move', sendBounds);
-  win.on('resize', sendBounds);
   // The native shadow is computed from the window's pixels; after a resize it
   // still has the old outline until macOS is told to recompute it.
   win.on('resized', () => win.invalidateShadow());
-  // Lets the renderer pin the glass to the pointer while the window is
-  // dragged; see liveWindow() in glass.js.
-  win.on('will-move', () => {
-    const b = win.getBounds();
-    win.webContents.send('glass:drag-start', { cursor: screen.getCursorScreenPoint(), win: { x: b.x, y: b.y } });
-  });
-  screen.on('display-metrics-changed', () => sendBounds(true));
-  screen.on('display-added', () => sendBounds(true));
-  screen.on('display-removed', () => sendBounds(true));
 
-  win.on('show', () => nativeGlass?.setActive(true));
-  win.on('hide', () => nativeGlass?.setActive(false));
-
-  win.webContents.once('did-finish-load', () => {
-    if (macCapture.available()) {
-      nativeGlass = macCapture.start((frame) => {
-        if (win && !win.isDestroyed()) win.webContents.send('glass:frame', frame);
-      });
-      if (!win.isVisible()) nativeGlass.setActive(false);
-    }
-    sendBounds(true);
-    // Safety net: a failed capture start or a stream that ended on its own
-    // would otherwise never be retried.
-    setInterval(() => sendBounds(true), 2000);
-  });
+  win.webContents.on('context-menu', showContextMenu);
+  win.webContents.on('did-finish-load', applyTextSize);
 }
 
 function showWindow() {
   if (!win || win.isDestroyed()) return;
   win.show();
   win.focus();
+}
+
+// ─── Right-click menu ────────────────────────────────────────────────────────
+// The renderer notes what was right-clicked (window.cleardayContext, set in
+// its own contextmenu handler, which runs before this event) so the menu knows
+// whether it is in a note, and whose.
+async function showContextMenu(_e, params) {
+  const wc = win.webContents;
+  let ctx = null;
+  try { ctx = await wc.executeJavaScript('window.cleardayContext || null'); } catch (_) {}
+  ctx = ctx || { field: params.isEditable ? 'input' : null };
+  const template = buildTemplate(params, { ...ctx, spellcheck: settings.get('spellcheckNotes') }, {
+    replace: (word) => wc.replaceMisspelling(word),
+    learn: (word) => wc.session.addWordToSpellCheckerDictionary(word),
+    lookUp: () => wc.showDefinitionForSelection(),
+    setDir: (dir) => wc.send('notes:dir', { id: ctx.taskId, dir }),
+    setSpellcheck: (on) => setSetting({ spellcheckNotes: on }),
+  });
+  if (template.length) Menu.buildFromTemplate(template).popup({ window: win });
 }
 
 // ─── Settings that act on the app ────────────────────────────────────────────
@@ -151,6 +142,10 @@ function applyLoginItem() {
   } catch (e) {
     console.error('could not set login item', e);
   }
+}
+
+function applyTextSize() {
+  if (win && !win.isDestroyed()) win.webContents.setZoomFactor(ZOOM[settings.get('textSize')] || 1);
 }
 
 function applyAlwaysOnTop() {
@@ -175,11 +170,17 @@ function applySetting(keys) {
   if (keys.includes('openAtLogin')) applyLoginItem();
   if (keys.includes('alwaysOnTop')) applyAlwaysOnTop();
   if (keys.includes('showIn')) applyShowIn();
+  if (keys.includes('textSize')) applyTextSize();
   if (win && !win.isDestroyed() && keys.length) win.webContents.send('settings', settings.all());
 }
 
 function setSetting(patch) {
   applySetting(settings.set(patch));
+}
+
+function openPreferences() {
+  showWindow();
+  win?.webContents.send('prefs:open');
 }
 
 // ─── Tray ────────────────────────────────────────────────────────────────────
@@ -220,50 +221,13 @@ function createTray() {
   });
   tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate([
     { label: 'Show ClearDay', click: showWindow },
+    { label: 'Preferences…', click: openPreferences },
     { type: 'separator' },
-    ...settingsTemplate(),
+    { label: 'Quit ClearDay', click: () => app.quit() },
   ])));
 }
 
 // ─── Menus ───────────────────────────────────────────────────────────────────
-function settingsTemplate() {
-  const radio = (label, key, value) => ({
-    label, type: 'radio', checked: settings.get(key) === value,
-    click: () => setSetting({ [key]: value }),
-  });
-  const items = [
-    {
-      label: 'Theme',
-      submenu: [
-        radio('Follow System', 'theme', 'system'),
-        radio('Light', 'theme', 'light'),
-        radio('Dark', 'theme', 'dark'),
-      ],
-    },
-    { type: 'separator' },
-    {
-      label: 'Always on Top', type: 'checkbox', checked: settings.get('alwaysOnTop'),
-      click: (item) => setSetting({ alwaysOnTop: item.checked }),
-    },
-    radio('Show in Dock', 'showIn', 'dock'),
-    radio('Menu Bar Only', 'showIn', 'menubar'),
-    {
-      label: 'Launch at Login', type: 'checkbox', checked: settings.get('openAtLogin'),
-      click: (item) => setSetting({ openAtLogin: item.checked }),
-    },
-  ];
-  // The live glass needs Screen Recording, which macOS only grants from
-  // System Settings. Until then the window uses the system blur instead.
-  if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
-    items.push({ type: 'separator' }, {
-      label: 'Allow Screen Recording for Live Glass…',
-      click: () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
-    });
-  }
-  items.push({ type: 'separator' }, { label: 'Quit ClearDay', accelerator: 'Cmd+Q', click: () => app.quit() });
-  return items;
-}
-
 function sortTemplate() {
   return SORTS.map((s) => ({
     label: SORT_LABELS[s], type: 'radio', checked: settings.get('sort') === s,
@@ -279,6 +243,8 @@ function appMenu() {
       label: 'ClearDay',
       submenu: [
         { role: 'about' },
+        { type: 'separator' },
+        { label: 'Preferences…', accelerator: 'Cmd+,', click: openPreferences },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -310,25 +276,28 @@ ipcMain.handle('tasks:restore', (_e, id) => store.restore(id));
 ipcMain.handle('settings:get', () => settings.all());
 ipcMain.handle('settings:set', (_e, patch) => { setSetting(patch || {}); return settings.all(); });
 
-const popup = (template) => Menu.buildFromTemplate(template).popup({ window: win });
-ipcMain.handle('menu:settings', () => popup(settingsTemplate()));
-ipcMain.handle('menu:sort', () => popup(sortTemplate()));
+ipcMain.handle('menu:sort', () => Menu.buildFromTemplate(sortTemplate()).popup({ window: win }));
 
-ipcMain.handle('glass:bounds', () => boundsPayload());
-ipcMain.handle('glass:mode', () => (macCapture.available() ? 'native' : 'none'));
-// Pointer and window position in one round trip, read at call time. Polled
-// only while the window is being dragged: macOS reports a dragged window's
-// position about ten times a second, the pointer every time it is asked.
-ipcMain.handle('glass:live', () => {
-  const b = win && !win.isDestroyed() ? win.getBounds() : null;
-  return { cursor: screen.getCursorScreenPoint(), win: b && { x: b.x, y: b.y } };
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataFile: store.FILE_PATH }));
+ipcMain.handle('app:reveal-data', () => { store.flush(); shell.showItemInFolder(store.FILE_PATH); });
+ipcMain.handle('app:export', async () => {
+  const day = new Date().toISOString().slice(0, 10);
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Export tasks',
+    defaultPath: path.join(app.getPath('downloads'), `ClearDay tasks ${day}.json`),
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (canceled || !filePath) return null;
+  const out = { schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), tasks: store.list() };
+  fs.writeFileSync(filePath, JSON.stringify(out, null, 2));
+  return filePath;
 });
-// 'live' once the shader is drawing captured frames; until then (no Screen
-// Recording grant, no helper, no WebGL) the system blur stands in.
-ipcMain.on('glass:state', (_e, state) => {
-  if (!win || win.isDestroyed() || process.platform !== 'darwin') return;
-  win.setVibrancy(state === 'live' ? null : 'under-window');
+ipcMain.handle('app:reset-bounds', () => {
+  const b = defaultBounds();
+  win?.setBounds(b);
+  settings.set({ bounds: b });
 });
+ipcMain.handle('app:quit', () => app.quit());
 
 // ─── Startup ─────────────────────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) {
@@ -337,7 +306,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showWindow);
   app.on('activate', showWindow);
   app.on('before-quit', () => { quitting = true; store.flush(); });
-  app.on('will-quit', () => nativeGlass?.stop());
 
   app.whenReady().then(async () => {
     app.setAboutPanelOptions({ applicationName: 'ClearDay', applicationVersion: app.getVersion() });

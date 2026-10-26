@@ -14,10 +14,20 @@ const DEFAULTS = {
   alwaysOnTop: false,
   showIn: 'dock',       // 'dock' | 'menubar'
   // On by default: a daily board you have to remember to open is one you stop
-  // looking at. Turning it off in the gear menu is written here and wins.
+  // looking at. Turning it off in Preferences is written here and wins.
   openAtLogin: true,
   bounds: null,         // { x, y, width, height } in DIP, restored on launch
+  // Preferences → Appearance
+  bgOpacityLight: 0.70, // window background opacity, 0–1, per appearance
+  bgOpacityDark: 0.75,
+  textSize: 'medium',   // 'small' | 'medium' | 'large'
+  showWeekday: true,
+  // Preferences → Behavior
+  spellcheckNotes: true,
+  sidePanel: 'todo',    // side tab showing: 'todo' | 'ongoing'
 };
+
+const fraction = (v) => typeof v === 'number' && v >= 0 && v <= 1;
 
 const VALID = {
   theme: (v) => ['system', 'light', 'dark'].includes(v),
@@ -26,6 +36,12 @@ const VALID = {
   showIn: (v) => ['dock', 'menubar'].includes(v),
   openAtLogin: (v) => typeof v === 'boolean',
   bounds: (v) => v === null || (v && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(v[k]))),
+  bgOpacityLight: fraction,
+  bgOpacityDark: fraction,
+  textSize: (v) => ['small', 'medium', 'large'].includes(v),
+  showWeekday: (v) => typeof v === 'boolean',
+  spellcheckNotes: (v) => typeof v === 'boolean',
+  sidePanel: (v) => ['todo', 'ongoing'].includes(v),
 };
 
 let cache = null;

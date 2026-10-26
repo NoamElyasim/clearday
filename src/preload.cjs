@@ -1,4 +1,4 @@
-// The renderer's whole view of the app: tasks, settings, menus, glass.
+// The renderer's whole view of the app: tasks, settings, menus, app actions.
 const { contextBridge, ipcRenderer } = require('electron');
 
 const on = (channel) => (cb) => ipcRenderer.on(channel, (_e, payload) => cb(payload));
@@ -17,17 +17,16 @@ contextBridge.exposeInMainWorld('clearday', {
     onChange: on('settings'),
   },
   menus: {
-    settings: () => ipcRenderer.invoke('menu:settings'),
     sort: () => ipcRenderer.invoke('menu:sort'),
   },
-  onClockResume: on('clock:resume'),
-  glass: {
-    mode: () => ipcRenderer.invoke('glass:mode'),
-    getBounds: () => ipcRenderer.invoke('glass:bounds'),
-    livePosition: () => ipcRenderer.invoke('glass:live'),
-    onBounds: on('glass:bounds'),
-    onDragStart: on('glass:drag-start'),
-    onFrame: on('glass:frame'),
-    setState: (state) => ipcRenderer.send('glass:state', state),
+  app: {
+    info: () => ipcRenderer.invoke('app:info'),
+    revealData: () => ipcRenderer.invoke('app:reveal-data'),
+    exportTasks: () => ipcRenderer.invoke('app:export'),
+    resetBounds: () => ipcRenderer.invoke('app:reset-bounds'),
+    quit: () => ipcRenderer.invoke('app:quit'),
   },
+  onPrefsOpen: on('prefs:open'),
+  onNotesDir: on('notes:dir'),
+  onClockResume: on('clock:resume'),
 });

@@ -2,7 +2,7 @@
   "name": "clearday",
   "productName": "ClearDay",
   "version": "0.1.0",
-  "description": "A compact, Monday-style daily task board that floats on your Mac desktop in liquid glass",
+  "description": "A compact, Monday-style daily task board that floats on your Mac desktop",
   "main": "src/main/main.mjs",
   "license": "MIT",
   "author": "Noam Elyasim",
@@ -12,8 +12,7 @@
     "shots": "electron tools/shots/main.mjs",
     "e2e": "electron tools/e2e/main.mjs",
     "make-icon": "node scripts/make-icon.js",
-    "build:native": "bash scripts/build-glass-capture.sh",
-    "dist:mac": "npm run build:native && electron-builder --mac",
+    "dist:mac": "electron-builder --mac",
     "install:mac": "bash scripts/install-mac.sh"
   },
   "devDependencies": {
@@ -41,13 +40,7 @@
         }
       ],
       "category": "public.app-category.productivity",
-      "identity": null,
-      "extraResources": [
-        {
-          "from": "bin/glass-capture",
-          "to": "glass-capture"
-        }
-      ]
+      "identity": null
     }
   },
   "allowScripts": {
