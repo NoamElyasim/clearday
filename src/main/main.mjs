@@ -53,9 +53,10 @@ function createWindow() {
     minHeight: MIN_SIZE.height,
     frame: false,
     transparent: true,
-    // The desktop behind the window is blurred by macOS; the board's own
-    // background (theme.css, opacity from Preferences) is drawn over it.
-    vibrancy: 'under-window',
+    // The desktop behind the window is blurred by macOS (unless turned off in
+    // Preferences); the board's own background (theme.css, opacity from
+    // Preferences) is drawn over it.
+    vibrancy: settings.get('blur') ? 'under-window' : undefined,
     visualEffectState: 'active',
     resizable: true,
     hasShadow: true,
@@ -144,6 +145,10 @@ function applyLoginItem() {
   }
 }
 
+function applyBlur() {
+  if (win && !win.isDestroyed()) win.setVibrancy(settings.get('blur') ? 'under-window' : null);
+}
+
 function applyTextSize() {
   if (win && !win.isDestroyed()) win.webContents.setZoomFactor(ZOOM[settings.get('textSize')] || 1);
 }
@@ -171,6 +176,7 @@ function applySetting(keys) {
   if (keys.includes('alwaysOnTop')) applyAlwaysOnTop();
   if (keys.includes('showIn')) applyShowIn();
   if (keys.includes('textSize')) applyTextSize();
+  if (keys.includes('blur')) applyBlur();
   if (win && !win.isDestroyed() && keys.length) win.webContents.send('settings', settings.all());
 }
 

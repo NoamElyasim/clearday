@@ -21,6 +21,7 @@ const DEFAULTS = {
   bgOpacityLight: 0.70, // window background opacity, 0–1, per appearance
   bgOpacityDark: 0.75,
   textSize: 'medium',   // 'small' | 'medium' | 'large'
+  blur: true,           // system blur of the desktop behind the window
   showWeekday: true,
   // Preferences → Behavior
   spellcheckNotes: true,
@@ -39,6 +40,7 @@ const VALID = {
   bgOpacityLight: fraction,
   bgOpacityDark: fraction,
   textSize: (v) => ['small', 'medium', 'large'].includes(v),
+  blur: (v) => typeof v === 'boolean',
   showWeekday: (v) => typeof v === 'boolean',
   spellcheckNotes: (v) => typeof v === 'boolean',
   sidePanel: (v) => ['todo', 'ongoing'].includes(v),

@@ -107,6 +107,7 @@ function build(info) {
         row('Theme', segmented('theme', [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']])),
         row('Background opacity', percent('bgOpacityLight', 'Background opacity in Light mode'), 'Light mode'),
         row('Background opacity', percent('bgOpacityDark', 'Background opacity in Dark mode'), 'Dark mode'),
+        row('Blur behind window', toggle('blur', 'Blur behind window')),
         row('Text size', segmented('textSize', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])),
         row('Show weekday', toggle('showWeekday', 'Show weekday')),
       ),
