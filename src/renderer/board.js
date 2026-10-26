@@ -1,4 +1,4 @@
-// Draws the board: sections on the left, the To Do panel on the right, one
+// Draws the board: sections on the left, the To Do / Ongoing panel on the right, one
 // element per task kept across renders (so focus, scroll and running
 // animations survive) and moved with a FLIP animation when its place changes.
 import { arrange, canDrag, STATUS_LABELS } from '../shared/model.mjs';
@@ -10,7 +10,7 @@ const MOVE_MS = 320;
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
 const els = new Map();   // id → { el, sig }
-let pane, sectionsEl, boardEl, todoEl, todoList, tabEl;
+let pane, sectionsEl, boardEl, sideEl, todoList, ongoingList;
 let skeletonKey = '';
 let notesHandlers = null;
 
@@ -18,9 +18,9 @@ export function initBoard(handlers) {
   pane = document.getElementById('pane');
   sectionsEl = document.getElementById('sections');
   boardEl = document.getElementById('board');
-  todoEl = document.getElementById('todo');
-  todoList = todoEl.querySelector('.list');
-  tabEl = document.getElementById('todo-tab');
+  sideEl = document.getElementById('side');
+  todoList = sideEl.querySelector('[data-page="todo"] .list');
+  ongoingList = sideEl.querySelector('[data-page="ongoing"] .list');
   notesHandlers = handlers;
 }
 
@@ -92,18 +92,17 @@ function createRow(task) {
 function createNotes(task) {
   const n = document.createElement('div');
   n.className = 'notes';
-  const close = button('notes-close', 'notes-close', ICONS.close, 'Close notes');
+  // Closed with the ≡ button that opened it; there is no close button here.
   const label = Object.assign(document.createElement('span'), { className: 'notes-label', textContent: 'Notes' });
   const ta = document.createElement('textarea');
   ta.placeholder = 'Write notes for this task…';
-  ta.spellcheck = true;
   ta.value = task.notes;
   ta.addEventListener('input', () => notesHandlers.onNotesInput(task.id, ta.value));
   const grip = document.createElement('div');
   grip.className = 'notes-resize';
   grip.title = 'Drag to resize';
   grip.addEventListener('pointerdown', (e) => startNotesResize(e, task.id, n));
-  n.append(close, label, ta, grip);
+  n.append(label, ta, grip);
   return n;
 }
 
@@ -132,7 +131,7 @@ function startNotesResize(e, id, notesEl) {
 function signature(task) {
   return [
     task.updatedAt, task.text, JSON.stringify(task.bold), task.status, task.priority,
-    task.notes.length > 0, task.notesHeight,
+    task.notes.length > 0, task.notesHeight, task.notesDir, state.spellcheck,
     state.selectedId === task.id, state.editingId === task.id, state.openNotes.has(task.id),
   ].join('|');
 }
@@ -181,6 +180,8 @@ function rowFor(task) {
   if (notes) {
     notes.style.height = `${task.notesHeight}px`;
     const ta = notes.querySelector('textarea');
+    ta.dir = task.notesDir || 'auto';
+    ta.spellcheck = state.spellcheck;
     if (document.activeElement !== ta && ta.value !== task.notes) ta.value = task.notes;
   }
   return el;
@@ -196,6 +197,7 @@ function ensureSkeleton(sections) {
     sec.className = 'section';
     const list = document.createElement('div');
     list.className = 'list';
+    list.dataset.list = 'today';
     list.dataset.status = s.status ?? '';
     if (s.status) {
       sec.dataset.status = s.status;
@@ -249,7 +251,7 @@ function play(before) {
 
 export function render({ animate = false } = {}) {
   const before = animate ? snapshot() : null;
-  const { todo, sections } = arrange([...state.tasks.values()], state.sort);
+  const { todo, sections, ongoing } = arrange([...state.tasks.values()], state.sort);
 
   pane.classList.toggle('can-drag', canDrag(state.sort));
   ensureSkeleton(sections);
@@ -262,12 +264,16 @@ export function render({ animate = false } = {}) {
     if (count) count.textContent = s.tasks.length;
   });
   reconcile(todoList, todo);
+  reconcile(ongoingList, ongoing);
 
   const boardCount = sections.reduce((n, s) => n + s.tasks.length, 0);
   boardEl.classList.toggle('is-empty', boardCount === 0);
-  todoEl.classList.toggle('is-empty', todo.length === 0);
-  todoEl.querySelector('.count').textContent = todo.length;
-  tabEl.querySelector('.count').textContent = todo.length;
+  const counts = { todo: todo.length, ongoing: ongoing.length };
+  for (const tab of ['todo', 'ongoing']) {
+    sideEl.querySelector(`[data-page="${tab}"]`).classList.toggle('is-empty', counts[tab] === 0);
+    for (const c of pane.querySelectorAll(`[data-tab="${tab}"] .count`)) c.textContent = counts[tab];
+  }
+  showSide(state.side);
 
   for (const [id, { el }] of els) {
     if (!state.tasks.has(id)) { el.remove(); els.delete(id); }
@@ -275,9 +281,15 @@ export function render({ animate = false } = {}) {
   if (before) play(before);
 }
 
+// Which side tab is showing: 'todo' or 'ongoing'.
+export function showSide(tab) {
+  for (const el of sideEl.querySelectorAll('.side-tab')) el.classList.toggle('active', el.dataset.tab === tab);
+  for (const el of sideEl.querySelectorAll('.side-page')) el.classList.toggle('active', el.dataset.page === tab);
+}
+
 // Tasks in the order they appear on screen, for ↑/↓.
 export function visibleOrder() {
   const lists = [...sectionsEl.querySelectorAll('.list')];
-  if (!state.compact || pane.classList.contains('todo-open')) lists.push(todoList);
+  if (!state.compact || pane.classList.contains('drawer-open')) lists.push(state.side === 'ongoing' ? ongoingList : todoList);
   return lists.flatMap((l) => [...l.children].map((c) => c.dataset.id).filter(Boolean));
 }

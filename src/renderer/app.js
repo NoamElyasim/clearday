@@ -1,15 +1,16 @@
-// Boot and behaviour: date header, layout, adding, editing, bold, pickers,
-// notes, delete with undo, drag and drop, and the keyboard.
+// Boot and behaviour: date header, layout, side tabs, adding, editing, bold,
+// pickers, notes, delete with undo, drag and drop, preferences, and the
+// keyboard.
 import {
   STATUSES, STATUS_LABELS, PRIORITIES, toggleBold, trimRich, orderBetween, arrange,
 } from '../shared/model.mjs';
 import { state, load, changed, onChange, createTask, updateTask, removeTask, restoreTask } from './state.js';
-import { initBoard, render, taskEl, textEl, visibleOrder } from './board.js';
+import { initBoard, render, taskEl, textEl, visibleOrder, showSide } from './board.js';
 import { renderRich, serialize, selectionOffsets, setSelection, caretToEnd } from './richtext.js';
 import { openPopover, closePopover, handlePopoverKey, isOpen as popoverOpen } from './popover.js';
 import { showToast } from './toast.js';
 import { initDnd } from './dnd.js';
-import { initGlass } from './glass.js';
+import { initPrefs, updatePrefs, openPrefs, closePrefs, isPrefsOpen } from './prefs.js';
 import { ICONS } from './icons.js';
 
 const api = window.clearday;
@@ -21,7 +22,8 @@ const NOTES_SAVE_MS = 400;
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const STATUS_VAR = {
-  todo: '--status-todo', in_progress: '--status-in-progress', on_hold: '--status-on-hold', done: '--status-done',
+  todo: '--status-todo', in_progress: '--status-in-progress', awaiting_approval: '--status-awaiting',
+  on_hold: '--status-on-hold', done: '--status-done',
 };
 
 // ─── Date header ─────────────────────────────────────────────────────────────
@@ -48,7 +50,7 @@ function setCompact(compact) {
   const apply = () => {
     state.compact = compact;
     pane.classList.toggle('compact', compact);
-    if (!compact) pane.classList.remove('todo-open');
+    if (!compact) pane.classList.remove('drawer-open');
   };
   if (document.startViewTransition && !pane.classList.contains('instant')) document.startViewTransition(apply);
   else apply();
@@ -56,7 +58,17 @@ function setCompact(compact) {
 new ResizeObserver(([entry]) => setCompact(entry.contentRect.width < COMPACT_BELOW)).observe(pane);
 
 function setDrawer(open) {
-  pane.classList.toggle('todo-open', open && state.compact);
+  pane.classList.toggle('drawer-open', open && state.compact);
+}
+
+// ─── Side tabs: To Do | Ongoing ──────────────────────────────────────────────
+// The tab showing also decides where the add field puts a new task.
+function setSide(tab, { save = true } = {}) {
+  if (tab !== 'todo' && tab !== 'ongoing') return;
+  state.side = tab;
+  showSide(tab);
+  addInput.placeholder = tab === 'ongoing' ? 'Add an ongoing task…' : 'Add a task…';
+  if (save) api.settings.set({ sidePanel: tab });
 }
 
 // ─── Adding ──────────────────────────────────────────────────────────────────
@@ -65,10 +77,10 @@ addForm.addEventListener('submit', async (e) => {
   const text = addInput.value.trim();
   if (!text) return;
   addInput.value = '';
-  await createTask({ text, status: 'todo' });
+  await createTask({ text, status: 'todo', list: state.side === 'ongoing' ? 'ongoing' : 'today' });
   render({ animate: true });
-  if (state.compact && !pane.classList.contains('todo-open')) {
-    const tab = document.getElementById('todo-tab');
+  if (state.compact && !pane.classList.contains('drawer-open')) {
+    const tab = pane.querySelector(`.edge-tab[data-tab="${state.side}"]`);
     tab.classList.remove('bump');
     void tab.offsetWidth;
     tab.classList.add('bump');
@@ -198,13 +210,31 @@ async function setPriority(id, priority) {
   render();
 }
 
+// Today ↔ Ongoing, keeping the status.
+async function moveList(id, list) {
+  const t = await updateTask(id, { list });
+  if (!t) return;
+  render({ animate: true });
+  showToast(list === 'ongoing' ? 'Moved to Ongoing' : 'Moved to Today', { duration: 2500 });
+}
+
+function moveItem(task) {
+  return task.list === 'ongoing'
+    ? { label: 'Move to Today', icon: ICONS.sort, onPick: () => moveList(task.id, 'today') }
+    : { label: 'Move to Ongoing', icon: ICONS.sort, onPick: () => moveList(task.id, 'ongoing') };
+}
+
 function statusItems(task) {
-  return STATUSES.map((s) => ({
-    label: STATUS_LABELS[s],
-    swatch: { color: css(STATUS_VAR[s]), kind: 'fill' },
-    checked: task.status === s,
-    onPick: () => setStatus(task.id, s),
-  }));
+  return [
+    ...STATUSES.map((s) => ({
+      label: STATUS_LABELS[s],
+      swatch: { color: css(STATUS_VAR[s]), kind: 'fill' },
+      checked: task.status === s,
+      onPick: () => setStatus(task.id, s),
+    })),
+    { sep: true },
+    moveItem(task),
+  ];
 }
 
 function priorityItems(task) {
@@ -224,6 +254,7 @@ function moreItems(task) {
     { heading: 'Priority' },
     ...priorityItems(task),
     { sep: true },
+    moveItem(task),
     { label: 'Delete', icon: ICONS.trash, danger: true, onPick: () => deleteTask(task.id) },
   ];
 }
@@ -245,18 +276,44 @@ const notesHandlers = {
   },
 };
 
-function openNotes(id) {
-  if (!state.openNotes.has(id)) {
-    state.openNotes.add(id);
-    render({ animate: true });
-  }
+// ≡ opens the notes under the row, and closes them again.
+function toggleNotes(id) {
+  if (state.openNotes.has(id)) return closeNotes(id);
+  state.openNotes.add(id);
+  render({ animate: true });
   taskEl(id)?.querySelector('.notes textarea')?.focus();
 }
 
 function closeNotes(id) {
+  // A note closed mid-typing still saves what was typed.
+  const ta = taskEl(id)?.querySelector('.notes textarea');
+  if (ta && noteTimers.has(id)) {
+    clearTimeout(noteTimers.get(id));
+    noteTimers.delete(id);
+    updateTask(id, { notes: ta.value });
+  }
   state.openNotes.delete(id);
   render({ animate: true });
 }
+
+// Writing Direction, chosen from a note's right-click menu (main.mjs).
+api.onNotesDir(async ({ id, dir }) => {
+  if (!state.tasks.has(id)) return;
+  await updateTask(id, { notesDir: dir });
+  render();
+});
+
+// Tells the right-click menu what was clicked: a note (and whose), a row's
+// text being edited, the add field, or nothing editable.
+document.addEventListener('contextmenu', (e) => {
+  const ta = e.target.closest?.('.notes textarea');
+  const id = e.target.closest?.('.task')?.dataset.id || null;
+  window.cleardayContext = ta
+    ? { field: 'notes', taskId: id, notesDir: state.tasks.get(id)?.notesDir || 'auto' }
+    : e.target.closest?.('.text[contenteditable="true"]') ? { field: 'text', taskId: id }
+    : e.target.matches?.('input, textarea') ? { field: 'input' }
+    : { field: null };
+}, true);
 
 // ─── Delete and undo ─────────────────────────────────────────────────────────
 const deleted = [];   // ids, most recent last, for ⌘Z
@@ -296,22 +353,24 @@ pane.addEventListener('click', (e) => {
 
   if (btn && task) {
     const action = btn.dataset.action;
-    if (action !== 'notes-close') select(id);
+    select(id);
     if (action === 'status') openPopover(btn, statusItems(task));
     else if (action === 'priority') openPopover(btn, priorityItems(task));
     else if (action === 'more') openPopover(btn, moreItems(task));
     else if (action === 'edit') startEdit(id);
     else if (action === 'bold') toggleBoldFor(id);
     else if (action === 'delete') deleteTask(id);
-    else if (action === 'notes') openNotes(id);
-    else if (action === 'notes-close') closeNotes(id);
+    else if (action === 'notes') toggleNotes(id);
     return;
   }
-  if (e.target.closest('#todo-tab')) { setDrawer(true); return; }
+  const sideTab = e.target.closest('.side-tab');
+  if (sideTab) { setSide(sideTab.dataset.tab); return; }
+  const edgeTab = e.target.closest('.edge-tab');
+  if (edgeTab) { setSide(edgeTab.dataset.tab); setDrawer(true); return; }
   if (taskNode && e.target.closest('.row')) { select(id); return; }
   if (e.target.closest('.notes')) return;
   // Empty space: deselect, and close the compact drawer when clicking past it.
-  if (!e.target.closest('#todo')) setDrawer(false);
+  if (!e.target.closest('#side')) setDrawer(false);
   if (!taskNode) select(null);
 });
 
@@ -322,24 +381,27 @@ function select(id) {
 }
 
 document.getElementById('sort-btn').addEventListener('click', () => api.menus.sort());
-document.getElementById('settings-btn').addEventListener('click', () => api.menus.settings());
+document.getElementById('settings-btn').addEventListener('click', () => (isPrefsOpen() ? closePrefs() : openPrefs()));
 document.getElementById('sort-btn').innerHTML = ICONS.sort;
 document.getElementById('settings-btn').innerHTML = ICONS.gear;
 document.getElementById('add-btn').innerHTML = ICONS.plus;
 
 // ─── Drag and drop ───────────────────────────────────────────────────────────
 initDnd(pane, {
-  async onDrop(id, { listStatus, prevId, nextId }) {
+  async onDrop(id, { list, listStatus, prevId, nextId }) {
     const task = state.tasks.get(id);
     if (!task) return;
-    // '' is the single board list of the non-default sorts: a task arriving
-    // there from To Do starts In Progress; one already on the board keeps its
-    // status.
-    const status = listStatus || (task.status === 'todo' ? 'in_progress' : task.status);
+    // Onto Ongoing: the task keeps its status. Onto Today: To Do and each
+    // board section set their status; '' is the single board list of the
+    // non-default sorts, where a task arriving from To Do starts In Progress
+    // and any other keeps its status.
+    const status = list === 'ongoing' ? task.status
+      : listStatus || (task.status === 'todo' ? 'in_progress' : task.status);
     const order = orderBetween(state.tasks.get(prevId)?.order ?? null, state.tasks.get(nextId)?.order ?? null);
-    await updateTask(id, { status, order });
+    await updateTask(id, { list: list === 'ongoing' ? 'ongoing' : 'today', status, order });
     render({ animate: true });
   },
+  onHoverTab: (tab) => setSide(tab),
 });
 
 // ─── Keyboard ────────────────────────────────────────────────────────────────
@@ -354,19 +416,25 @@ window.addEventListener('keydown', (e) => {
     if (id) { e.preventDefault(); toggleBoldFor(id); }
     return;
   }
+  if (cmd && e.key === ',') {
+    e.preventDefault();
+    if (isPrefsOpen()) closePrefs(); else openPrefs();
+    return;
+  }
   if (cmd && e.key.toLowerCase() === 'n') {
     e.preventDefault();
     addInput.focus();
     return;
   }
   if (e.key === 'Escape') {
+    if (isPrefsOpen()) { closePrefs(); return; }
     if (state.editingId) { cancelEdit(); return; }
     if (document.activeElement === addInput) { addInput.value = ''; addInput.blur(); return; }
-    if (pane.classList.contains('todo-open')) { setDrawer(false); return; }
+    if (pane.classList.contains('drawer-open')) { setDrawer(false); return; }
     select(null);
     return;
   }
-  if (typing(e.target)) return;
+  if (typing(e.target) || isPrefsOpen()) return;
 
   if (cmd && (e.key === 'Backspace' || e.key === 'Delete')) {
     if (state.selectedId) { e.preventDefault(); deleteTask(state.selectedId); }
@@ -404,21 +472,41 @@ async function boot() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updateDate(); });
 
   const s = await api.settings.get();
-  state.sort = s.sort;
-  api.settings.onChange((next) => {
-    const sortChanged = next.sort !== state.sort;
-    state.sort = next.sort;
-    if (sortChanged) render({ animate: true });
-  });
+  applySettings(s, { first: true });
+  api.settings.onChange((next) => applySettings(next));
 
   await load();
   setCompact(pane.clientWidth < COMPACT_BELOW);
   render();
+  await initPrefs(s);
   // Transitions on only after the first paint, so nothing animates in.
   requestAnimationFrame(() => requestAnimationFrame(() => pane.classList.remove('instant')));
-  initGlass(pane, document.getElementById('glass')).catch((e) => console.error('glass init failed', e));
 }
+
+// Settings the window shows directly. Text size is applied by the main
+// process as the page zoom.
+function applySettings(s, { first = false } = {}) {
+  const root = document.documentElement.style;
+  root.setProperty('--bg-opacity-light', String(s.bgOpacityLight));
+  root.setProperty('--bg-opacity-dark', String(s.bgOpacityDark));
+  document.getElementById('weekday').hidden = !s.showWeekday;
+
+  const sortChanged = s.sort !== state.sort;
+  const spellChanged = s.spellcheckNotes !== state.spellcheck;
+  state.sort = s.sort;
+  state.spellcheck = s.spellcheckNotes;
+  if (s.sidePanel !== state.side || first) setSide(s.sidePanel, { save: false });
+  if (!first) {
+    updatePrefs(s);
+    if (sortChanged) render({ animate: true });
+    else if (spellChanged) render();
+  }
+}
+
 boot();
 
 // For the screenshot harness and debugging from the console.
-window.cleardayDebug = { state, updateDate, render, changed, arrange, openNotes, startEdit, toggleBoldFor, setDrawer, popoverOpen, closePopover };
+window.cleardayDebug = {
+  state, updateDate, render, changed, arrange, toggleNotes, startEdit, toggleBoldFor, setDrawer, setSide,
+  openPrefs, closePrefs, popoverOpen, closePopover,
+};

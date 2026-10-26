@@ -1,24 +1,26 @@
 // Drag and drop by the row's grip. Pointer events rather than HTML5 drag, so
 // the lifted row follows the pointer smoothly and siblings can slide aside.
 // Dropping between the To Do panel and the board changes status; dropping on
-// a board section takes that section's status.
+// a board section takes that section's status; dropping on the Ongoing list
+// moves the task there. Hovering a side tab mid-drag switches to it.
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const START_PX = 4;
 
 let drag = null;
 
-export function initDnd(pane, { onDrop }) {
+export function initDnd(pane, { onDrop, onHoverTab }) {
   pane.addEventListener('pointerdown', (e) => {
     const grip = e.target.closest('.grip');
     if (!grip || e.button !== 0 || !pane.classList.contains('can-drag')) return;
     e.preventDefault();
     const taskEl = grip.closest('.task');
-    drag = { pane, taskEl, startX: e.clientX, startY: e.clientY, started: false, pointerId: e.pointerId, onDrop };
-    grip.setPointerCapture(e.pointerId);
-    grip.addEventListener('pointermove', onMove);
-    grip.addEventListener('pointerup', onUp);
-    grip.addEventListener('pointercancel', onCancel);
-    drag.grip = grip;
+    drag = { pane, taskEl, startX: e.clientX, startY: e.clientY, started: false, pointerId: e.pointerId, onDrop, onHoverTab };
+    // Captured on the pane, not the grip: the lifted row is moved in the DOM
+    // when the drag starts, and moving an element drops its pointer capture.
+    pane.setPointerCapture(e.pointerId);
+    pane.addEventListener('pointermove', onMove);
+    pane.addEventListener('pointerup', onUp);
+    pane.addEventListener('pointercancel', onCancel);
   });
   window.addEventListener('keydown', (e) => {
     if (drag?.started && e.key === 'Escape') { e.preventDefault(); onCancel(); }
@@ -42,6 +44,9 @@ function begin() {
   taskEl.style.left = `${r.left}px`;
   taskEl.style.top = `${r.top}px`;
   taskEl.classList.add('dragging');
+  // Lifted out of its list, so it stays visible if that list's side tab is
+  // switched away mid-drag.
+  pane.append(taskEl);
   pane.classList.add('dragging');
   drag.started = true;
 }
@@ -75,7 +80,7 @@ function listAt(x, y) {
   let best = null, bestDist = Infinity;
   for (const l of panel.querySelectorAll('.list')) {
     const r = l.getBoundingClientRect();
-    if (!r.height && !r.width) continue;
+    if (!r.height && !r.width) continue;   // a hidden side tab
     const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
     if (d < bestDist) { best = l; bestDist = d; }
   }
@@ -91,6 +96,9 @@ function onMove(e) {
   const { taskEl, placeholder } = drag;
   taskEl.style.left = `${e.clientX - drag.offsetX}px`;
   taskEl.style.top = `${e.clientY - drag.offsetY}px`;
+
+  const tab = document.elementFromPoint(e.clientX, e.clientY)?.closest('.side-tab');
+  if (tab && !tab.classList.contains('active')) drag.onHoverTab?.(tab.dataset.tab);
 
   const list = listAt(e.clientX, e.clientY) || placeholder.parentElement;
   const items = [...list.children].filter((c) => c !== taskEl && c !== placeholder);
@@ -118,12 +126,17 @@ function autoScroll(list, y) {
   else if (y > r.bottom - zone) panel.scrollTop += 8;
 }
 
+function release() {
+  const { pane, pointerId } = drag;
+  pane.removeEventListener('pointermove', onMove);
+  pane.removeEventListener('pointerup', onUp);
+  pane.removeEventListener('pointercancel', onCancel);
+  try { pane.releasePointerCapture(pointerId); } catch (_) {}
+}
+
 function cleanup() {
-  const { grip, taskEl, pane, pointerId } = drag;
-  grip.removeEventListener('pointermove', onMove);
-  grip.removeEventListener('pointerup', onUp);
-  grip.removeEventListener('pointercancel', onCancel);
-  try { grip.releasePointerCapture(pointerId); } catch (_) {}
+  const { taskEl, pane } = drag;
+  release();
   taskEl.classList.remove('dragging');
   taskEl.style.width = taskEl.style.left = taskEl.style.top = '';
   pane.classList.remove('dragging');
@@ -144,25 +157,22 @@ function settle(parent, next) {
 function onUp() {
   if (!drag) return;
   if (!drag.started) {
-    const { grip, pointerId } = drag;
-    grip.removeEventListener('pointermove', onMove);
-    grip.removeEventListener('pointerup', onUp);
-    grip.removeEventListener('pointercancel', onCancel);
-    try { grip.releasePointerCapture(pointerId); } catch (_) {}
+    release();
     drag = null;
     return;
   }
   const { placeholder, taskEl, onDrop } = drag;
   const list = placeholder.parentElement;
-  // The lifted row is still in the DOM where it started; skip over it.
-  const skip = (el, dir) => (el === taskEl ? el[dir] : el);
-  const prev = skip(placeholder.previousElementSibling, 'previousElementSibling');
-  const next = skip(placeholder.nextElementSibling, 'nextElementSibling');
+  // The lifted row sits in the pane while dragged, so the placeholder's
+  // neighbours are the real ones.
+  const prev = placeholder.previousElementSibling;
+  const next = placeholder.nextElementSibling;
   settle(list, next);
   const id = taskEl.dataset.id;
   drag = null;
   onDrop(id, {
-    listStatus: list.dataset.status,   // '' = the flat board list
+    list: list.dataset.list,           // 'today' | 'ongoing'
+    listStatus: list.dataset.status,   // '' = the flat board list, or the Ongoing list
     prevId: prev?.dataset.id || null,
     nextId: next?.dataset.id || null,
   });

@@ -10,6 +10,8 @@ export const state = {
   editingId: null,
   openNotes: new Set(),   // ids whose notes panel is open
   compact: false,
+  side: 'todo',           // side tab showing: 'todo' | 'ongoing'
+  spellcheck: true,       // spelling in notes (Preferences)
 };
 
 const listeners = new Set();

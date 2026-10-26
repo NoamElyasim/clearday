@@ -16,22 +16,19 @@ button {
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 svg { display: block; }
 
-/* ─── The glass pane: the whole window ───────────────────────────────────── */
+/* ─── The pane: the whole window ─────────────────────────────────────────── */
 #pane {
   position: absolute; inset: 0;
   border-radius: var(--radius-window);
   overflow: hidden;
   display: flex; flex-direction: column;
   isolation: isolate;
+  /* Over the system blur; opacity is a Preferences setting per appearance */
+  background: rgb(var(--bg-rgb) / var(--bg-opacity));
   /* The widget's hairline edge */
   box-shadow: inset 0 0 0 1px var(--window-hairline);
+  transition: background-color var(--dur-fast) ease;
 }
-#pane.no-glass { background: var(--fallback-fill); }
-#glass {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  z-index: -1; pointer-events: none;
-}
-#pane.no-glass #glass { visibility: hidden; }
 /* Soft top-lit rim, as on the widget */
 #pane::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
@@ -105,12 +102,40 @@ svg { display: block; }
 /* Rows scrolling out fade instead of being cut at the panel edge */
 #board { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
 .panel::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
-#todo {
+#side {
+  display: flex; flex-direction: column;
+  overflow: hidden;   /* each tab's page scrolls on its own, under the tab bar */
   background: var(--panel-bg);
   border-radius: 14px;
-  padding: 8px;
+  padding: 6px 8px 0;
   box-shadow: inset 0 0 0 1px var(--hairline);
 }
+
+/* To Do | Ongoing */
+.side-tabs {
+  flex: none;
+  display: flex; gap: 2px;
+  margin: 0 -2px 8px;
+}
+.side-tab {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; border-radius: 8px;
+  font-size: 12px; font-weight: 650; color: var(--text-dim);
+  text-shadow: var(--text-shadow);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.side-tab:hover { color: var(--text); }
+.side-tab.active { background: var(--surface-hover); color: var(--text); box-shadow: inset 0 0 0 1px var(--hairline); }
+#pane.dragging .side-tab:not(.active) { outline: 1.5px dashed var(--text-faint); outline-offset: -3px; }
+.dot.ongoing { background: var(--list-ongoing); }
+.side-page { display: none; }
+.side-page.active {
+  display: block; flex: 1; min-height: 0;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: thin;
+  padding-bottom: 8px;
+  animation: page-in 180ms var(--ease-out);
+}
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } }
 #board { padding: 2px; }
 
 .panel-head, .section-head {
@@ -139,12 +164,13 @@ svg { display: block; }
   padding: 22px 10px; text-align: center;
   color: var(--text-faint); font-size: 12px; line-height: 1.5;
 }
-#board.is-empty #board-empty, #todo.is-empty .empty { display: block; }
+#board.is-empty #board-empty, .side-page.is-empty .empty { display: block; }
 #pane.dragging .empty { display: none !important; }
 
 /* ─── Status colours: one variable, used by the fill, dots and notes edge ── */
 [data-status="todo"] { --fill: var(--status-todo); }
 [data-status="in_progress"] { --fill: var(--status-in-progress); }
+[data-status="awaiting_approval"] { --fill: var(--status-awaiting); }
 [data-status="on_hold"] { --fill: var(--status-on-hold); }
 [data-status="done"] { --fill: var(--status-done); }
 
@@ -261,7 +287,7 @@ svg { display: block; }
   background: var(--notes-bg);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   box-shadow: inset 3px 0 0 var(--fill), inset 0 0 0 1px var(--hairline);
-  padding: 30px 12px 14px 14px;
+  padding: 28px 12px 14px 14px;
   min-height: 72px;
   animation: notes-in var(--dur-move) var(--ease-out);
 }
@@ -269,16 +295,8 @@ svg { display: block; }
   from { opacity: 0; clip-path: inset(0 0 100% 0 round 4px); }
   to { opacity: 1; clip-path: inset(0 0 0 0 round 4px); }
 }
-.notes-close {
-  position: absolute; top: 5px; left: 7px;
-  width: 22px; height: 22px; border-radius: 50%;
-  color: var(--text-dim);
-  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
-}
-.notes-close:hover { background: var(--surface-hover); color: var(--text); }
-.notes-close svg { width: 13px; height: 13px; }
 .notes-label {
-  position: absolute; top: 9px; left: 34px;
+  position: absolute; top: 9px; left: 14px;
   font-size: 11px; font-weight: 600; color: var(--text-dim);
 }
 .notes textarea {
@@ -303,9 +321,9 @@ svg { display: block; }
 }
 
 /* ─── Compact layout ─────────────────────────────────────────────────────── */
-#todo-tab { display: none; }
+#edge-tabs { display: none; }
 #pane.compact #main { grid-template-columns: minmax(0, 1fr); }
-#pane.compact #todo {
+#pane.compact #side {
   position: absolute; top: 0; right: 10px; bottom: 12px;
   width: min(300px, 86%);
   z-index: 20;
@@ -316,24 +334,30 @@ svg { display: block; }
   transform: translateX(calc(100% + 24px));
   transition: transform var(--dur-move) var(--ease-out);
 }
-#pane.compact.todo-open #todo { transform: none; }
-#pane.compact #todo-tab {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
+#pane.compact.drawer-open #side { transform: none; }
+/* Two tabs on the right edge, each opening the drawer on its own list */
+#pane.compact #edge-tabs {
+  display: flex; flex-direction: column; gap: 8px;
   position: absolute; right: 0; top: 50%; translate: 0 -50%;
   z-index: 15;
+  transition: opacity var(--dur-fast) ease;
+}
+.edge-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 12px 3px;
   writing-mode: vertical-rl;
   border-radius: 10px 0 0 10px;
-  background: var(--status-todo); color: var(--on-fill);
+  background: var(--fill); color: var(--on-fill);
   font-size: 11px; font-weight: 650; text-shadow: var(--on-fill-shadow);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 8px rgba(0, 0, 0, 0.18);
-  transition: transform var(--dur-move) var(--ease-out), opacity var(--dur-fast) ease;
 }
-#todo-tab .count { color: var(--on-fill-dim); }
-#todo-tab.bump { animation: bump 420ms var(--ease-out); }
+.edge-tab[data-tab="todo"] { --fill: var(--status-todo); }
+.edge-tab[data-tab="ongoing"] { --fill: var(--list-ongoing); }
+.edge-tab .count { color: var(--on-fill-dim); }
+.edge-tab.bump { animation: bump 420ms var(--ease-out); }
 @keyframes bump { 40% { transform: translateX(-5px) scale(1.06); } }
-#pane.compact.todo-open #todo-tab { opacity: 0; pointer-events: none; }
-/* Room on the right for the tab, so it never sits on a row */
+#pane.compact.drawer-open #edge-tabs { opacity: 0; pointer-events: none; }
+/* Room on the right for the tabs, so they never sit on a row */
 #pane.compact #main { padding-right: 34px; }
 
 /* Row controls collapse into "…", shown on hover */

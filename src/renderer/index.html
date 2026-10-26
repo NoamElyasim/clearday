@@ -6,11 +6,10 @@
 <title>ClearDay</title>
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="prefs.css">
 </head>
 <body>
-<div id="pane" class="no-glass instant">
-  <canvas id="glass"></canvas>
-
+<div id="pane" class="instant">
   <header id="header">
     <div class="date">
       <span id="date"></span>
@@ -18,7 +17,7 @@
     </div>
     <div class="header-actions">
       <button id="sort-btn" class="icon-btn" title="Sort" aria-label="Sort"></button>
-      <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings"></button>
+      <button id="settings-btn" class="icon-btn" title="Preferences (⌘,)" aria-label="Preferences"></button>
     </div>
   </header>
 
@@ -33,23 +32,37 @@
       <div id="board-empty" class="empty">Nothing on the board yet.<br>Set a task to In Progress to start your day.</div>
     </section>
 
-    <aside id="todo" class="panel" aria-label="To Do">
-      <div class="panel-head">
-        <span class="dot" data-status="todo"></span>
-        <span class="title">To Do</span>
-        <span class="count"></span>
+    <aside id="side" class="panel" aria-label="To Do and Ongoing">
+      <div class="side-tabs" role="tablist">
+        <button class="side-tab" data-tab="todo" role="tab">
+          <span class="dot" data-status="todo"></span><span class="title">To Do</span><span class="count"></span>
+        </button>
+        <button class="side-tab" data-tab="ongoing" role="tab">
+          <span class="dot ongoing"></span><span class="title">Ongoing</span><span class="count"></span>
+        </button>
       </div>
-      <div class="list" data-status="todo"></div>
-      <div class="empty">Nothing to do.</div>
+      <div class="side-page" data-page="todo">
+        <div class="list" data-list="today" data-status="todo"></div>
+        <div class="empty">Nothing to do.</div>
+      </div>
+      <div class="side-page" data-page="ongoing">
+        <div class="list" data-list="ongoing"></div>
+        <div class="empty">No ongoing projects yet.<br>With this tab open, add one above.</div>
+      </div>
     </aside>
 
-    <button id="todo-tab" title="To Do" aria-label="Show To Do">
-      <span class="title">To Do</span>
-      <span class="count"></span>
-    </button>
+    <div id="edge-tabs">
+      <button class="edge-tab" data-tab="todo" title="To Do" aria-label="Show To Do">
+        <span class="title">To Do</span><span class="count"></span>
+      </button>
+      <button class="edge-tab" data-tab="ongoing" title="Ongoing" aria-label="Show Ongoing">
+        <span class="title">Ongoing</span><span class="count"></span>
+      </button>
+    </div>
   </main>
 
   <div id="toasts" aria-live="polite"></div>
+  <div id="prefs" role="dialog" aria-label="Preferences" aria-hidden="true"></div>
 </div>
 <div id="popover-layer"></div>
 <script type="module" src="app.js"></script>

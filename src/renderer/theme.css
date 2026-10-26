@@ -2,21 +2,25 @@
    Status and priority colours are placeholders until final hex values are
    chosen; change them here and nothing else needs touching.
 
-   Material, radii, font and text shadows are taken from the token usage
-   widget (Claude Usage Limits Bar, index.html) so both apps read as one
-   family. The glass itself is drawn by glass.js, which reads its --glass-*
-   tuning from here too. */
+   Radii, font and text shadows are taken from the token usage widget
+   (Claude Usage Limits Bar) so both apps read as one family. The window's
+   background is --bg-rgb at the opacity set in Preferences, over the
+   system's blur of the desktop. */
 
 :root {
   /* ── Status fills: the whole row takes this colour, text turns white ── */
   --status-todo: #7C8591;          /* gray */
   --status-in-progress: #C27C0E;   /* yellow — deep amber so white text reads */
+  --status-awaiting: #3D9BE0;      /* light blue */
   --status-on-hold: #8A5A3B;       /* brown */
   --status-done: #2E9E5B;          /* green */
 
   /* ── Priority rings ── */
   --priority-high: #FF453A;        /* red */
   --priority-medium: #FF9F0A;      /* orange */
+
+  /* The Ongoing list's tab in the compact layout */
+  --list-ongoing: #5B6B8C;         /* slate */
 
   /* Text on a status fill, in both modes */
   --on-fill: #FFFFFF;
@@ -27,6 +31,7 @@
 
   /* ── Shape and type (from the widget) ── */
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --ui-scale: 1;                   /* Preferences → Text size */
   --radius-window: 20px;
   --radius-row: 12px;
   --radius-popover: 14px;
@@ -43,7 +48,7 @@
   --danger: #FF453A;
 }
 
-/* ── Dark: smoked frost, white text — the widget's own look ─────────────── */
+/* ── Dark: white text — the widget's own look ──────────────────────────── */
 :root {
   color-scheme: dark;
   --text: rgba(255, 255, 255, 0.95);
@@ -69,23 +74,20 @@
   --popover-border: rgba(255, 255, 255, 0.22);
   --popover-shadow: 0 2px 4px rgba(0, 0, 0, 0.14), 0 10px 30px rgba(0, 0, 0, 0.30);
   --popover-blur: blur(24px) saturate(160%);
+  /* Preferences sheet: nearly opaque, so the board doesn't read through */
+  --sheet-bg: rgba(34, 34, 40, 0.94);
 
   /* The notes panel under a row, and the To Do panel's own backing */
   --notes-bg: rgba(16, 16, 22, 0.42);
   --panel-bg: rgba(255, 255, 255, 0.06);
 
-  /* Before live glass is available (no Screen Recording grant yet), the window
-     sits on the system blur with this over it — the widget's .no-glass fill. */
-  --fallback-fill: rgba(26, 26, 30, 0.45);
-
-  /* Shader tuning, read by glass.js. Tint is the widget's 0.32 toward white;
-     smoke then darkens the pane so a full board of white text stays legible. */
-  --glass-mode: 0;          /* 0 = dark, 1 = light */
-  --glass-tint: 0.32;
-  --glass-smoke: 0.34;
+  /* Window background: this colour at the Preferences opacity (set on
+     :root by app.js as --bg-opacity-dark / --bg-opacity-light). */
+  --bg-rgb: 28 28 32;
+  --bg-opacity: var(--bg-opacity-dark, 0.75);
 }
 
-/* ── Light: milky frost, dark text ──────────────────────────────────────── */
+/* ── Light: dark text ──────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
@@ -107,14 +109,12 @@
     --popover-bg: rgba(250, 250, 252, 0.78);
     --popover-border: rgba(255, 255, 255, 0.85);
     --popover-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 10px 30px rgba(0, 0, 0, 0.16);
+    --sheet-bg: rgba(248, 248, 250, 0.95);
 
     --notes-bg: rgba(255, 255, 255, 0.62);
     --panel-bg: rgba(255, 255, 255, 0.28);
 
-    --fallback-fill: rgba(250, 250, 252, 0.40);
-
-    --glass-mode: 1;
-    --glass-tint: 0.55;
-    --glass-smoke: 0;
+    --bg-rgb: 246 246 248;
+    --bg-opacity: var(--bg-opacity-light, 0.70);
   }
 }
