@@ -116,8 +116,8 @@ test('arrange: default groups board by status, To Do apart, Done last', () => {
   ];
   const a = arrange(tasks, 'default');
   assert.deepEqual(a.todo.map((t) => t.id), ['t1']);
-  assert.deepEqual(a.sections.map((s) => s.status), ['in_progress', 'on_hold', 'done']);
-  assert.deepEqual(a.sections.map((s) => s.tasks.map((t) => t.id)), [['p1', 'p2'], ['h1'], ['d1']]);
+  assert.deepEqual(a.sections.map((s) => s.status), ['in_progress', 'awaiting_approval', 'on_hold', 'done']);
+  assert.deepEqual(a.sections.map((s) => s.tasks.map((t) => t.id)), [['p1', 'p2'], [], ['h1'], ['d1']]);
 });
 
 test('arrange: priority sort is one list, high then medium then none', () => {
@@ -141,4 +141,36 @@ test('orderBetween and nextOrder', () => {
   assert.equal(orderBetween(null, null), 0);
   assert.equal(nextOrder([{ order: 3 }, { order: 7 }]), 8);
   assert.equal(nextOrder([]), 1);
+});
+
+test('Awaiting Approval sits between In Progress and On Hold', () => {
+  const a = arrange([mk('h', 'on_hold', 1), mk('w', 'awaiting_approval', 2), mk('p', 'in_progress', 3)], 'default');
+  assert.deepEqual(a.sections.filter((s) => s.tasks.length).map((s) => s.tasks[0].id), ['p', 'w', 'h']);
+});
+
+test('ongoing tasks stay off the board and To Do, ordered by status then drag order', () => {
+  const on = (id, status, order) => ({ ...mk(id, status, order), list: 'ongoing' });
+  const a = arrange([on('od', 'done', 1), on('ot', 'todo', 2), on('op2', 'in_progress', 4), on('op1', 'in_progress', 3),
+    on('ow', 'awaiting_approval', 5), mk('t', 'todo', 6), mk('p', 'in_progress', 7)], 'default');
+  assert.deepEqual(a.todo.map((t) => t.id), ['t']);
+  assert.deepEqual(a.sections.flatMap((s) => s.tasks.map((t) => t.id)), ['p']);
+  assert.deepEqual(a.ongoing.map((t) => t.id), ['op1', 'op2', 'ow', 'ot', 'od']);
+  assert.deepEqual(arrange([on('b', 'done', 2), on('a', 'todo', 1)], 'manual').ongoing.map((t) => t.id), ['a', 'b']);
+});
+
+test('list and notesDir default, validate and survive a patch', () => {
+  const t = createTask({ text: 'x' });
+  assert.equal(t.list, 'today');
+  assert.equal(t.notesDir, 'auto');
+  assert.equal(createTask({ list: 'ongoing' }).list, 'ongoing');
+  assert.equal(createTask({ list: 'bogus' }).list, 'today');
+  const n = applyPatch(t, { list: 'ongoing', notesDir: 'rtl' });
+  assert.equal(n.list, 'ongoing');
+  assert.equal(n.notesDir, 'rtl');
+  const bad = applyPatch(n, { list: 'nope', notesDir: 'up' });
+  assert.equal(bad.list, 'ongoing');
+  assert.equal(bad.notesDir, 'rtl');
+  const v = validateTask({ id: 'old', text: 'from v0.1.0' });   // no list / notesDir on disk
+  assert.equal(v.list, 'today');
+  assert.equal(v.notesDir, 'auto');
 });

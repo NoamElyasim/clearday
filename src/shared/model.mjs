@@ -5,15 +5,25 @@
 
 export const SCHEMA_VERSION = 1;
 
-export const STATUSES = ['todo', 'in_progress', 'on_hold', 'done'];
+export const STATUSES = ['todo', 'in_progress', 'awaiting_approval', 'on_hold', 'done'];
 export const STATUS_LABELS = {
   todo: 'To Do',
   in_progress: 'In Progress',
+  awaiting_approval: 'Awaiting Approval',
   on_hold: 'On Hold',
   done: 'Done',
 };
 // Main board sections, top to bottom. To Do has its own side panel.
-export const BOARD_STATUSES = ['in_progress', 'on_hold', 'done'];
+export const BOARD_STATUSES = ['in_progress', 'awaiting_approval', 'on_hold', 'done'];
+// The Ongoing list keeps every status in one column, active work first.
+const ONGOING_RANK = { in_progress: 0, awaiting_approval: 1, on_hold: 2, todo: 3, done: 4 };
+
+// Which list a task belongs to: today's board (with its To Do panel), or the
+// Ongoing list of long-term projects beside it.
+export const LISTS = ['today', 'ongoing'];
+
+// Writing direction of a task's notes; 'auto' follows the text.
+export const NOTES_DIRS = ['auto', 'ltr', 'rtl'];
 
 export const PRIORITIES = [null, 'medium', 'high'];
 export const PRIORITY_LABELS = { null: 'None', medium: 'Medium', high: 'High' };
@@ -116,7 +126,7 @@ export function trimRich(text, bold) {
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 
-export function createTask({ text = '', bold = [], status = 'todo', priority = null, order = 0 } = {}, now = Date.now()) {
+export function createTask({ text = '', bold = [], status = 'todo', priority = null, order = 0, list = 'today' } = {}, now = Date.now()) {
   const t = String(text);
   const ts = nowIso(now);
   return {
@@ -125,8 +135,10 @@ export function createTask({ text = '', bold = [], status = 'todo', priority = n
     bold: normalizeRanges(bold, t.length),
     status: STATUSES.includes(status) ? status : 'todo',
     priority: PRIORITIES.includes(priority) ? priority : null,
+    list: LISTS.includes(list) ? list : 'today',
     notes: '',
     notesHeight: DEFAULT_NOTES_HEIGHT,
+    notesDir: 'auto',
     order,
     createdAt: ts,
     updatedAt: ts,
@@ -134,7 +146,7 @@ export function createTask({ text = '', bold = [], status = 'todo', priority = n
   };
 }
 
-const EDITABLE = ['text', 'bold', 'status', 'priority', 'notes', 'notesHeight', 'order', 'deletedAt'];
+const EDITABLE = ['text', 'bold', 'status', 'priority', 'list', 'notes', 'notesHeight', 'notesDir', 'order', 'deletedAt'];
 
 // Applies a partial update. Unknown keys are dropped and every field is
 // validated, so a bad patch from either side can never corrupt the store.
@@ -145,6 +157,8 @@ export function applyPatch(task, patch, now = Date.now()) {
   next.bold = normalizeRanges(next.bold, next.text.length);
   if (!STATUSES.includes(next.status)) next.status = task.status;
   if (!PRIORITIES.includes(next.priority)) next.priority = task.priority;
+  if (!LISTS.includes(next.list)) next.list = LISTS.includes(task.list) ? task.list : 'today';
+  if (!NOTES_DIRS.includes(next.notesDir)) next.notesDir = NOTES_DIRS.includes(task.notesDir) ? task.notesDir : 'auto';
   next.notes = String(next.notes ?? '');
   next.notesHeight = clampNotesHeight(next.notesHeight);
   if (!Number.isFinite(next.order)) next.order = task.order;
@@ -170,8 +184,10 @@ export function validateTask(raw) {
     bold: normalizeRanges(raw.bold, text.length),
     status: STATUSES.includes(raw.status) ? raw.status : 'todo',
     priority: PRIORITIES.includes(raw.priority) ? raw.priority : null,
+    list: LISTS.includes(raw.list) ? raw.list : 'today',
     notes: String(raw.notes ?? ''),
     notesHeight: clampNotesHeight(raw.notesHeight),
+    notesDir: NOTES_DIRS.includes(raw.notesDir) ? raw.notesDir : 'auto',
     order: Number.isFinite(raw.order) ? raw.order : created || 0,
     createdAt,
     updatedAt: Number.isFinite(updated) ? new Date(updated).toISOString() : createdAt,
@@ -207,17 +223,24 @@ export function comparator(sort) {
 }
 
 // What the window shows. Default sort groups the main board by status; the
-// others show it as one list in that order. To Do is always its own panel.
-//   → { todo: Task[], sections: [{ status, tasks }] }  (status null = one flat list)
+// others show it as one list in that order. To Do is always its own panel,
+// and Ongoing its own list beside it, holding every status.
+//   → { todo: Task[], sections: [{ status, tasks }], ongoing: Task[] }
+//     (a section with status null is the one flat board list)
 export function arrange(tasks, sort = 'default') {
   const live = tasks.filter((t) => !t.deletedAt);
   const cmp = comparator(sort);
-  const todo = live.filter((t) => t.status === 'todo').sort(cmp);
-  const board = live.filter((t) => t.status !== 'todo');
+  const today = live.filter((t) => (t.list || 'today') === 'today');
+  const todo = today.filter((t) => t.status === 'todo').sort(cmp);
+  const board = today.filter((t) => t.status !== 'todo');
   const sections = sort === 'default'
     ? BOARD_STATUSES.map((status) => ({ status, tasks: board.filter((t) => t.status === status).sort(cmp) }))
     : [{ status: null, tasks: board.sort(cmp) }];
-  return { todo, sections };
+  const ongoingCmp = sort === 'default'
+    ? (a, b) => ONGOING_RANK[a.status] - ONGOING_RANK[b.status] || cmp(a, b)
+    : cmp;
+  const ongoing = live.filter((t) => t.list === 'ongoing').sort(ongoingCmp);
+  return { todo, sections, ongoing };
 }
 
 // Drag-and-drop works in Default (within and across sections) and Manual.
