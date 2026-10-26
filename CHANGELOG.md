@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.2.0 — 2026-10-27
+
+- **Preferences**, from the gear or ⌘,:
+  - Appearance: theme, background opacity (separate for Light and Dark),
+    blur behind the window, text size, weekday.
+  - Behavior: always on top, Dock or menu bar only, launch at login, sort,
+    spell checking in notes.
+  - Data: show the data folder, export tasks, reset the window position.
+  - A list of keyboard shortcuts.
+- **Ongoing list** for long-term projects, in a tab beside To Do (and its own
+  edge tab in the narrow layout).
+  - Ongoing tasks keep their statuses and stay off today's board.
+  - Move tasks between Today and Ongoing from the status picker or by
+    dragging them.
+- **New status: Awaiting Approval** (light blue). It sits between In
+  Progress and On Hold.
+- **Notes:**
+  - The ≡ button now closes notes as well as opening them, so the X is gone.
+  - Right-clicking in a note offers spelling suggestions, Look Up, speech,
+    and writing direction (kept per note).
+- **The live glass is gone, and with it the Screen Recording prompt.** The
+  window now uses the system blur under a background you set yourself.
+
 ## v0.1.0 — 2026-10-26
 
 First release.
