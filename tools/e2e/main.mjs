@@ -26,12 +26,9 @@ ipcMain.handle('tasks:remove', (_e, id) => store.remove(id));
 ipcMain.handle('tasks:restore', (_e, id) => store.restore(id));
 ipcMain.handle('settings:get', () => settings.all());
 ipcMain.handle('settings:set', (_e, p) => { settings.set(p || {}); win.webContents.send('settings', settings.all()); return settings.all(); });
-ipcMain.handle('menu:settings', () => {});
 ipcMain.handle('menu:sort', () => {});
-ipcMain.handle('glass:mode', () => 'none');
-ipcMain.handle('glass:bounds', () => ({ bounds: { x: 0, y: 0, width: 780, height: 560 }, scaleFactor: 2 }));
-ipcMain.handle('glass:live', () => ({ cursor: { x: 0, y: 0 }, win: { x: 0, y: 0 } }));
-ipcMain.on('glass:state', () => {});
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataFile: '' }));
+for (const ch of ['app:reveal-data', 'app:export', 'app:reset-bounds', 'app:quit']) ipcMain.handle(ch, () => null);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
@@ -91,13 +88,15 @@ async function run() {
   await key('Enter');
   let t = byText('Plan the sprint review');
   check('Enter adds a task to To Do', t?.status === 'todo' &&
-    await js(`!!document.querySelector('#todo .list ${taskSel(t?.id)}')`), `typed "${typed}"`);
+    await js(`!!document.querySelector('[data-page="todo"] .list ${taskSel(t?.id)}')`), `typed "${typed}"`);
   if (!t) throw new Error('cannot continue without the new task');
   const id = t.id;
 
   // ── Status ──
   await click(`${taskSel(id)} .status-btn`);
-  check('status button opens the picker', await js(`document.querySelectorAll('.popover .pop-item').length === 4`));
+  check('the status picker lists 5 statuses and Move to Ongoing', await js(`(() => {
+    const items = [...document.querySelectorAll('.popover .pop-item')].map((b) => b.textContent);
+    return items.length === 6 && items.some((t) => t.includes('Awaiting Approval')) && items[5].includes('Move to Ongoing'); })()`));
   await js(`[...document.querySelectorAll('.popover .pop-item')].find((b) => b.textContent.includes('In Progress')).classList.add('e2e')`);
   await click('.popover .pop-item.e2e');
   await sleep(400);
@@ -155,6 +154,12 @@ async function run() {
   check('notes save automatically', task(id).notes === 'Bring the burndown chart');
   await key('Escape');
   check('Esc does not close notes', await js(`!!document.querySelector('${taskSel(id)} .notes')`));
+  check('notes have no X button', await js(`!document.querySelector('${taskSel(id)} .notes button')`));
+  await wc.executeJavaScript('0');
+  win.webContents.send('notes:dir', { id, dir: 'rtl' });
+  await sleep(300);
+  check('Writing Direction sets the note right-to-left', task(id).notesDir === 'rtl' &&
+    await js(`document.querySelector('${taskSel(id)} .notes textarea').dir`) === 'rtl');
   const grip = await rect(`${taskSel(id)} .notes-resize`);
   wc.sendInputEvent({ type: 'mouseMove', x: grip.x, y: grip.y });
   wc.sendInputEvent({ type: 'mouseDown', x: grip.x, y: grip.y, button: 'left', clickCount: 1 });
@@ -162,8 +167,8 @@ async function run() {
   wc.sendInputEvent({ type: 'mouseUp', x: grip.x, y: grip.y + 64, button: 'left', clickCount: 1 });
   await sleep(300);
   check('dragging the bottom edge resizes notes', task(id).notesHeight >= 160 + 50, `height ${task(id).notesHeight}`);
-  await click(`${taskSel(id)} .notes-close`);
-  check('X closes notes; ≡ shows a notes dot',
+  await click(`${taskSel(id)} [data-action="notes"]`);
+  check('≡ again closes notes; ≡ shows a notes dot',
     await js(`!document.querySelector('${taskSel(id)} .notes') && document.querySelector('${taskSel(id)} .notes-btn').classList.contains('has-notes')`));
 
   // ── Delete and undo ──
@@ -195,7 +200,7 @@ async function run() {
   const after = await ip();
   check('dragging a row reorders its section', after[after.length - 1] === first && after.length === before.length,
     `${before.length} rows`);
-  const todoFirst = await js(`document.querySelector('#todo .task')?.dataset.id`);
+  const todoFirst = await js(`document.querySelector('[data-page="todo"] .task')?.dataset.id`);
   const tg = await rect(`${taskSel(todoFirst)} .grip`);
   wc.sendInputEvent({ type: 'mouseMove', x: tg.x, y: tg.y });
   wc.sendInputEvent({ type: 'mouseDown', x: tg.x, y: tg.y, button: 'left', clickCount: 1 });
@@ -216,6 +221,52 @@ async function run() {
   await sleep(500);
   check('dragging from To Do onto a board section changes its status', task(todoFirst).status === 'on_hold', task(todoFirst).status);
 
+  // ── Awaiting Approval ──
+  await click(`${taskSel(todoFirst)} .status-btn`);
+  await js(`[...document.querySelectorAll('.popover .pop-item')].find((b) => b.textContent.includes('Awaiting')).classList.add('e2e')`);
+  await click('.popover .pop-item.e2e');
+  await sleep(400);
+  check('Awaiting Approval moves a row to its own section, in light blue',
+    task(todoFirst).status === 'awaiting_approval' &&
+    await js(`!!document.querySelector('.section[data-status="awaiting_approval"] ${taskSel(todoFirst)}')`) &&
+    await js(`getComputedStyle(document.querySelector('${taskSel(todoFirst)} .row')).backgroundColor`) === 'rgb(61, 155, 224)');
+
+  // ── Ongoing ──
+  await click('.side-tab[data-tab="ongoing"]');
+  check('the Ongoing tab shows its list and is remembered',
+    settings.get('sidePanel') === 'ongoing' && await js(`document.querySelector('[data-page="ongoing"]').classList.contains('active')`));
+  await click('#add-input');
+  await type('Website redesign');
+  await key('Enter');
+  const og = byText('Website redesign');
+  check('adding with Ongoing showing puts the task in Ongoing', og?.list === 'ongoing' &&
+    await js(`!!document.querySelector('[data-page="ongoing"] ${taskSel(og?.id)}')`));
+  await click(`${taskSel(og.id)} .status-btn`);
+  await js(`[...document.querySelectorAll('.popover .pop-item')].find((b) => b.textContent.includes('In Progress')).classList.add('e2e')`);
+  await click('.popover .pop-item.e2e');
+  await sleep(400);
+  check('an Ongoing task takes a status but stays off the board', task(og.id).status === 'in_progress' &&
+    task(og.id).list === 'ongoing' && await js(`!document.querySelector('#sections ${taskSel(og.id)}')`));
+  await click(`${taskSel(og.id)} .status-btn`);
+  await js(`[...document.querySelectorAll('.popover .pop-item')].find((b) => b.textContent.includes('Move to Today')).classList.add('e2e')`);
+  await click('.popover .pop-item.e2e');
+  await sleep(400);
+  check('Move to Today puts it on the board, status kept', task(og.id).list === 'today' &&
+    await js(`!!document.querySelector('.section[data-status="in_progress"] ${taskSel(og.id)}')`));
+  await click('.side-tab[data-tab="todo"]');
+
+  // ── Preferences ──
+  await click('#settings-btn');
+  await sleep(300);
+  check('the gear opens Preferences', await js(`document.getElementById('prefs').classList.contains('open')`));
+  await js(`(() => { const s = document.querySelectorAll('#prefs .slider')[1]; s.value = 40; s.dispatchEvent(new Event('input')); })()`);
+  await sleep(300);
+  check('the Dark opacity slider saves and updates the background', settings.get('bgOpacityDark') === 0.4 &&
+    await js(`document.documentElement.style.getPropertyValue('--bg-opacity-dark')`) === '0.4');
+  await key('Escape');
+  await sleep(300);
+  check('Esc closes Preferences', await js(`!document.getElementById('prefs').classList.contains('open')`));
+
   // ── Sort ──
   settings.set({ sort: 'priority' });
   wc.send('settings', settings.all());
@@ -234,7 +285,7 @@ async function run() {
   const saved = onDisk.tasks.find((x) => x.id === id);
   check('everything is on disk after a save',
     saved && saved.text === 'Plan the sprint review today' && saved.priority === 'high' && saved.notes === 'Bring the burndown chart' &&
-    saved.status === 'in_progress' && !saved.deletedAt && typeof saved.updatedAt === 'string');
+    saved.status === 'in_progress' && saved.notesDir === 'rtl' && !saved.deletedAt && typeof saved.updatedAt === 'string');
 
   console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');
   fs.rmSync(TMP, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 // Demo board used by the screenshot harness and dev runs: every status, both
-// priorities, partial bold, notes. `node tools/shots/seed.mjs <dir>` writes it
+// priorities, partial bold, notes, and a few Ongoing projects. `node tools/shots/seed.mjs <dir>` writes it
 // as <dir>/tasks.json.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +13,7 @@ const ROWS = [
   { text: 'Review the Houston demo deck', boldWords: ['Houston demo deck'], status: 'in_progress', priority: 'high',
     notes: 'Slides 4–7 still use the old logo.\nAsk Ben for the final booth photo.' },
   { text: 'Reply to the investor follow-up email', status: 'in_progress', priority: 'medium' },
+  { text: 'Send the booth quote to finance', status: 'awaiting_approval', priority: 'medium' },
   { text: 'Book flights for ADIPEC', boldWords: ['Book'], status: 'on_hold',
     notes: 'Waiting on final dates.' },
   { text: 'Export the booth wall print files', status: 'done', priority: 'high' },
@@ -20,11 +21,15 @@ const ROWS = [
   { text: 'Draft the LinkedIn post for Thursday', boldWords: ['Thursday'], status: 'todo', priority: 'medium' },
   { text: 'Update the product one-pager', status: 'todo' },
   { text: 'Call the print shop about vinyl stock', status: 'todo', priority: 'high' },
+  { text: 'Website redesign', boldWords: ['Website'], status: 'in_progress', priority: 'high', list: 'ongoing',
+    notes: 'Phase 1: product pages.\nPhase 2: blog and press.' },
+  { text: 'Brand guidelines v2', status: 'awaiting_approval', list: 'ongoing' },
+  { text: 'Plan the 2027 trade show calendar', status: 'todo', list: 'ongoing' },
 ];
 
 export function seedTasks(base = Date.parse('2026-10-26T07:00:00Z')) {
   return ROWS.map((r, i) => {
-    const t = createTask({ text: r.text, bold: (r.boldWords || []).map((w) => word(r.text, w)), status: r.status, priority: r.priority || null, order: i + 1 },
+    const t = createTask({ text: r.text, bold: (r.boldWords || []).map((w) => word(r.text, w)), status: r.status, priority: r.priority || null, list: r.list || 'today', order: i + 1 },
       base + i * 60000);
     return r.notes ? applyPatch(t, { notes: r.notes }, base + i * 60000) : t;
   });

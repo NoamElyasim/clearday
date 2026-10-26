@@ -2,10 +2,9 @@
 // for the README.
 //
 // Loads the real renderer and preload with the demo board (seed.mjs), in a
-// hidden window, with the glass fed frames cut from a still backdrop instead
-// of the screen — the same trick as the token widget's shapeshots. The page
-// gets the backdrop as its background and the pane is inset, so each shot
-// looks like the window sitting on a desktop.
+// hidden window. The page gets a still backdrop as its background and the
+// pane is inset with a CSS blur standing in for the system's vibrancy, so
+// each shot looks like the window sitting on a desktop.
 //
 //   npm run shots           → tools/shots/out/*.png, plus a midnight check
 //   npm run shots -- --docs → also copies the README images into docs/
@@ -33,14 +32,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─── IPC, as main.mjs registers it, minus the OS ─────────────────────────────
 let page = { width: 0, height: 0 };
+let current = null;   // the shot's window
 ipcMain.handle('settings:get', () => settings.all());
-ipcMain.handle('settings:set', (_e, p) => { settings.set(p || {}); return settings.all(); });
-ipcMain.handle('menu:settings', () => {});
+ipcMain.handle('settings:set', (_e, p) => {
+  settings.set(p || {});
+  current?.webContents.send('settings', settings.all());
+  return settings.all();
+});
 ipcMain.handle('menu:sort', () => {});
-ipcMain.handle('glass:mode', () => 'native');
-ipcMain.handle('glass:bounds', () => ({ bounds: { x: 0, y: 0, ...page }, scaleFactor: 2 }));
-ipcMain.handle('glass:live', () => ({ cursor: { x: -1000, y: -1000 }, win: { x: 0, y: 0 } }));
-ipcMain.on('glass:state', () => {});
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), dataFile: '' }));
+for (const ch of ['app:reveal-data', 'app:export', 'app:reset-bounds', 'app:quit']) ipcMain.handle(ch, () => null);
+const DEFAULT_SETTINGS = { ...settings.all() };
 
 function backdrop(w, h) {
   const png = path.join(TMP, 'backdrop.png');
@@ -52,32 +54,30 @@ function backdrop(w, h) {
   const cw = Math.round(w / k), ch = Math.round(h / k);
   const img = src.crop({ x: Math.round((sw - cw) / 2), y: Math.round((sh - ch) / 2), width: cw, height: ch })
     .resize({ width: w, height: h, quality: 'best' });
-  return {
-    dataUrl: img.toDataURL(),
-    // toBitmap is BGRA, the order the shader expects from the helper.
-    frame: { width: w, height: h, displayId: '1', rect: { x: 0, y: 0, width: w, height: h }, pixels: new Uint8Array(img.toBitmap()) },
-  };
+  return { dataUrl: img.toDataURL() };
 }
 
-async function shot(name, { theme, width, height, setup }) {
+async function shot(name, { theme, width, height, setup, prefs = {} }) {
   writeSeed(TMP);
   await reloadStore();
+  settings.set({ ...DEFAULT_SETTINGS, ...prefs });
   nativeTheme.themeSource = theme;
   page = { width: width + INSET * 2, height: height + INSET * 2 };
   const win = new BrowserWindow({
     ...page, show: false, useContentSize: true, transparent: true, frame: false,
     webPreferences: { preload: path.join(REPO, 'src', 'preload.cjs'), contextIsolation: true },
   });
+  current = win;
   win.webContents.on('console-message', (e) => console.log(`[${name}] ${e.message}`));
   await win.loadFile(path.join(REPO, 'src', 'renderer', 'index.html'));
   const bg = backdrop(page.width, page.height);
   await win.webContents.insertCSS(`
     html { background: url("${bg.dataUrl}") 0 0 / 100% 100% no-repeat !important; }
     #pane { inset: ${INSET}px !important; overflow: hidden;
+      -webkit-backdrop-filter: blur(30px) saturate(170%); backdrop-filter: blur(30px) saturate(170%);
       box-shadow: inset 0 0 0 1px var(--window-hairline), 0 2px 6px rgba(0,0,0,.18), 0 18px 40px rgba(0,0,0,.30) !important; }
   `);
   const js = (code) => win.webContents.executeJavaScript(code);
-  win.webContents.send('glass:frame', bg.frame);
   await sleep(600);
   if (setup) await setup(js);
   await sleep(700);
@@ -101,8 +101,11 @@ ipcMain.handle('tasks:remove', (_e, id) => storeRef.remove(id));
 ipcMain.handle('tasks:restore', (_e, id) => storeRef.restore(id));
 
 const firstId = `cleardayDebug.state.tasks.values().next().value.id`;
-const openNotes = (js) => js(`cleardayDebug.openNotes(${firstId}); document.activeElement.blur(); 1`);
+const openNotes = (js) => js(`cleardayDebug.toggleNotes(${firstId}); document.activeElement.blur(); 1`);
 const clickFirst = (sel) => (js) => js(`document.querySelector(${JSON.stringify(sel)}).click(); 1`);
+
+// Hebrew notes, written right to left.
+const RTL_NOTE = 'לבדוק את השקפים 4–7\nלבקש מבן את תמונת הביתן';
 
 const SHOTS = {
   'expanded-dark': { theme: 'dark', width: 780, height: 560, setup: openNotes },
@@ -113,6 +116,19 @@ const SHOTS = {
   'status-picker-dark': { theme: 'dark', width: 780, height: 560, setup: clickFirst('#sections .status-btn') },
   'priority-picker-light': { theme: 'light', width: 780, height: 560, setup: clickFirst('#sections [data-action="priority"]') },
   'editing-dark': { theme: 'dark', width: 780, height: 560, setup: (js) => js(`cleardayDebug.startEdit(${firstId}); 1`) },
+  'ongoing-dark': { theme: 'dark', width: 780, height: 560, prefs: { sidePanel: 'ongoing' } },
+  'ongoing-compact-light': { theme: 'light', width: 420, height: 600, prefs: { sidePanel: 'ongoing' },
+    setup: (js) => js('cleardayDebug.setDrawer(true); 1') },
+  'prefs-dark': { theme: 'dark', width: 780, height: 560, setup: (js) => js('cleardayDebug.openPrefs(); 1') },
+  'prefs-light-narrow': { theme: 'light', width: 340, height: 600, setup: (js) => js('cleardayDebug.openPrefs(); 1') },
+  'opacity-30-dark': { theme: 'dark', width: 780, height: 560, prefs: { bgOpacityDark: 0.3 } },
+  'opacity-100-light': { theme: 'light', width: 780, height: 560, prefs: { bgOpacityLight: 1 } },
+  'opacity-0-light': { theme: 'light', width: 780, height: 560, prefs: { bgOpacityLight: 0 } },
+  'notes-rtl-dark': { theme: 'dark', width: 780, height: 560, setup: async (js) => {
+    await js(`cleardayDebug.toggleNotes(${firstId}); 1`);
+    await js(`(async () => { const id = ${firstId}; await window.clearday.tasks.update(id, { notesDir: 'rtl', notes: ${JSON.stringify(RTL_NOTE)} });
+      cleardayDebug.state.tasks.set(id, (await window.clearday.tasks.list()).find((t) => t.id === id)); document.activeElement.blur(); cleardayDebug.render(); })()`);
+  } },
 };
 
 // Each shot closes its window; that must not end the run.
