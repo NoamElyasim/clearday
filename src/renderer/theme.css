@@ -1,0 +1,120 @@
+/* ClearDay theme — every colour in the app lives here, as a CSS variable.
+   Status and priority colours are placeholders until final hex values are
+   chosen; change them here and nothing else needs touching.
+
+   Material, radii, font and text shadows are taken from the token usage
+   widget (Claude Usage Limits Bar, index.html) so both apps read as one
+   family. The glass itself is drawn by glass.js, which reads its --glass-*
+   tuning from here too. */
+
+:root {
+  /* ── Status fills: the whole row takes this colour, text turns white ── */
+  --status-todo: #7C8591;          /* gray */
+  --status-in-progress: #C27C0E;   /* yellow — deep amber so white text reads */
+  --status-on-hold: #8A5A3B;       /* brown */
+  --status-done: #2E9E5B;          /* green */
+
+  /* ── Priority rings ── */
+  --priority-high: #FF453A;        /* red */
+  --priority-medium: #FF9F0A;      /* orange */
+
+  /* Text on a status fill, in both modes */
+  --on-fill: #FFFFFF;
+  --on-fill-dim: rgba(255, 255, 255, 0.78);
+  --on-fill-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  /* Thin dark keyline that keeps a ring visible on any fill */
+  --ring-keyline: rgba(0, 0, 0, 0.42);
+
+  /* ── Shape and type (from the widget) ── */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --radius-window: 20px;
+  --radius-row: 12px;
+  --radius-popover: 14px;
+  --radius-control: 7px;
+  --row-height: 40px;
+
+  /* ── Motion ── */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);   /* the widget's morph curve */
+  --dur-fast: 150ms;
+  --dur-move: 320ms;
+
+  /* ── Accent (focus rings, selection, the add button) ── */
+  --accent: #3B82F6;
+  --danger: #FF453A;
+}
+
+/* ── Dark: smoked frost, white text — the widget's own look ─────────────── */
+:root {
+  color-scheme: dark;
+  --text: rgba(255, 255, 255, 0.95);
+  --text-dim: rgba(255, 255, 255, 0.70);
+  --text-faint: rgba(255, 255, 255, 0.45);
+  /* The widget's label shadow: the dark half carries legibility over a light
+     backdrop, the white glow lifts it off a dark one. */
+  --text-shadow: 0 0 10px rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.5);
+
+  --surface: rgba(255, 255, 255, 0.12);          /* inputs, empty states */
+  --surface-hover: rgba(255, 255, 255, 0.22);    /* the widget's menu-button hover */
+  --hairline: rgba(255, 255, 255, 0.18);
+  --selection: rgba(59, 130, 246, 0.45);
+
+  /* Window edge: the widget's inset hairline and its top-lit gradient rim */
+  --window-hairline: rgba(255, 255, 255, 0.45);
+  --rim-top: rgba(255, 255, 255, 0.85);
+  --rim-mid: rgba(255, 255, 255, 0.35);
+  --rim-bottom: rgba(255, 255, 255, 0.55);
+
+  /* Popovers and the compact To Do drawer: CSS backdrop blur over the board */
+  --popover-bg: rgba(40, 40, 46, 0.72);
+  --popover-border: rgba(255, 255, 255, 0.22);
+  --popover-shadow: 0 2px 4px rgba(0, 0, 0, 0.14), 0 10px 30px rgba(0, 0, 0, 0.30);
+  --popover-blur: blur(24px) saturate(160%);
+
+  /* The notes panel under a row, and the To Do panel's own backing */
+  --notes-bg: rgba(16, 16, 22, 0.42);
+  --panel-bg: rgba(255, 255, 255, 0.06);
+
+  /* Before live glass is available (no Screen Recording grant yet), the window
+     sits on the system blur with this over it — the widget's .no-glass fill. */
+  --fallback-fill: rgba(26, 26, 30, 0.45);
+
+  /* Shader tuning, read by glass.js. Tint is the widget's 0.32 toward white;
+     smoke then darkens the pane so a full board of white text stays legible. */
+  --glass-mode: 0;          /* 0 = dark, 1 = light */
+  --glass-tint: 0.32;
+  --glass-smoke: 0.34;
+}
+
+/* ── Light: milky frost, dark text ──────────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --text: rgba(20, 20, 24, 0.92);
+    --text-dim: rgba(20, 20, 24, 0.62);
+    --text-faint: rgba(20, 20, 24, 0.40);
+    --text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+
+    --surface: rgba(255, 255, 255, 0.45);
+    --surface-hover: rgba(255, 255, 255, 0.70);
+    --hairline: rgba(0, 0, 0, 0.10);
+    --selection: rgba(59, 130, 246, 0.30);
+
+    --window-hairline: rgba(255, 255, 255, 0.65);
+    --rim-top: rgba(255, 255, 255, 0.95);
+    --rim-mid: rgba(255, 255, 255, 0.50);
+    --rim-bottom: rgba(255, 255, 255, 0.70);
+
+    --popover-bg: rgba(250, 250, 252, 0.78);
+    --popover-border: rgba(255, 255, 255, 0.85);
+    --popover-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 10px 30px rgba(0, 0, 0, 0.16);
+
+    --notes-bg: rgba(255, 255, 255, 0.62);
+    --panel-bg: rgba(255, 255, 255, 0.28);
+
+    --fallback-fill: rgba(250, 250, 252, 0.40);
+
+    --glass-mode: 1;
+    --glass-tint: 0.55;
+    --glass-smoke: 0;
+  }
+}

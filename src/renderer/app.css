@@ -1,0 +1,434 @@
+/* Layout and components. Colours come only from theme.css variables. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: transparent; overflow: hidden;
+  font-family: var(--font); font-size: 13px; color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+button {
+  font: inherit; color: inherit; background: none; border: 0;
+  display: inline-grid; place-items: center; cursor: default;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg { display: block; }
+
+/* ─── The glass pane: the whole window ───────────────────────────────────── */
+#pane {
+  position: absolute; inset: 0;
+  border-radius: var(--radius-window);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  isolation: isolate;
+  /* The widget's hairline edge */
+  box-shadow: inset 0 0 0 1px var(--window-hairline);
+}
+#pane.no-glass { background: var(--fallback-fill); }
+#glass {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  z-index: -1; pointer-events: none;
+}
+#pane.no-glass #glass { visibility: hidden; }
+/* Soft top-lit rim, as on the widget */
+#pane::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: linear-gradient(to bottom, var(--rim-top), var(--rim-mid) 30%, var(--rim-bottom));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  z-index: 70;
+}
+#pane.instant, #pane.instant * { transition: none !important; }
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+#header {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 12px 8px 18px;
+  -webkit-app-region: drag;
+}
+.date { display: flex; align-items: baseline; gap: 8px; text-shadow: var(--text-shadow); }
+#date { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+#weekday { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.header-actions { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+.icon-btn {
+  width: 28px; height: 28px; border-radius: var(--radius-control);
+  color: var(--text-dim);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.icon-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ─── Add field ──────────────────────────────────────────────────────────── */
+#add { flex: none; display: flex; gap: 6px; padding: 0 12px 10px; }
+#add-input {
+  flex: 1; min-width: 0; height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit; font-size: 13px;
+  outline: none;
+  user-select: text;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+#add-input::placeholder { color: var(--text-faint); }
+#add-input:focus { background: var(--surface-hover); border-color: var(--accent); }
+#add-btn {
+  flex: none; width: 32px; height: 32px; border-radius: 10px;
+  background: var(--accent); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform var(--dur-fast) ease, filter var(--dur-fast) ease;
+}
+#add-btn:hover { filter: brightness(1.08); }
+#add-btn:active { transform: scale(0.94); }
+
+/* ─── Board and To Do panel ──────────────────────────────────────────────── */
+#main {
+  flex: 1; min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, 42%, 400px);
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.panel {
+  min-height: 0;
+  container-type: inline-size;
+  overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.panel::-webkit-scrollbar { width: 6px; }
+/* Rows scrolling out fade instead of being cut at the panel edge */
+#board { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
+.panel::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
+#todo {
+  background: var(--panel-bg);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+#board { padding: 2px; }
+
+.panel-head, .section-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 2px 4px 7px;
+  font-size: 12px; font-weight: 650;
+  text-shadow: var(--text-shadow);
+}
+.count { color: var(--text-dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+.dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--fill);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.section + .section { margin-top: 14px; }
+/* Empty sections stay out of the way, except while dragging, when they are
+   drop targets. */
+.section.is-empty { display: none; }
+#pane.dragging .section.is-empty { display: block; }
+.list { display: flex; flex-direction: column; gap: 6px; min-height: 2px; }
+#pane.dragging .list { min-height: 40px; }
+
+.empty {
+  display: none;
+  padding: 22px 10px; text-align: center;
+  color: var(--text-faint); font-size: 12px; line-height: 1.5;
+}
+#board.is-empty #board-empty, #todo.is-empty .empty { display: block; }
+#pane.dragging .empty { display: none !important; }
+
+/* ─── Status colours: one variable, used by the fill, dots and notes edge ── */
+[data-status="todo"] { --fill: var(--status-todo); }
+[data-status="in_progress"] { --fill: var(--status-in-progress); }
+[data-status="on_hold"] { --fill: var(--status-on-hold); }
+[data-status="done"] { --fill: var(--status-done); }
+
+/* ─── Task row ───────────────────────────────────────────────────────────── */
+.task { position: relative; }
+.row {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  min-height: var(--row-height);
+  padding: 6px 6px 6px 8px;
+  border-radius: var(--radius-row);
+  background: var(--fill);
+  color: var(--on-fill);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.10),
+              0 1px 2px rgba(0, 0, 0, 0.12),
+              0 4px 10px rgba(0, 0, 0, 0.10);
+  transition: background-color var(--dur-move) ease, border-radius var(--dur-fast) ease;
+}
+/* Liquid-glass gloss over the fill */
+.row::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 55%);
+}
+.row > * { position: relative; }
+.row.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.status-btn {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.12);
+  color: var(--fill);
+  transition: transform var(--dur-fast) ease, background-color var(--dur-fast) ease;
+}
+.status-btn:hover { background: rgba(255, 255, 255, 0.28); transform: scale(1.08); }
+.status-btn:active { transform: scale(0.94); }
+.status-btn svg { width: 12px; height: 12px; }
+[data-status="done"] > .row .status-btn { background: #fff; }
+
+.text {
+  flex: 1; min-width: 0;
+  font-size: 13px; line-height: 1.38;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  text-shadow: var(--on-fill-shadow);
+  user-select: text; cursor: text;
+}
+.text b { font-weight: 750; }
+.text::selection, .text *::selection { background: rgba(255, 255, 255, 0.38); }
+.text[contenteditable="true"] {
+  outline: none;
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  padding: 2px 6px; margin: -2px -6px;
+  caret-color: #fff;
+}
+
+.controls { flex: none; display: flex; align-items: center; gap: 2px; }
+.edit-group { display: flex; gap: 1px; opacity: 0.7; transition: opacity var(--dur-fast) ease; }
+.row:hover .edit-group, .row.selected .edit-group { opacity: 1; }
+.ctl {
+  width: 24px; height: 24px; border-radius: var(--radius-control);
+  color: var(--on-fill);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+  transition: background-color var(--dur-fast) ease;
+}
+.ctl:hover { background: rgba(255, 255, 255, 0.22); }
+.ctl:active, .ctl.open { background: rgba(255, 255, 255, 0.32); }
+.ctl.more { display: none; }
+
+/* Priority ring: a glowing ring in the priority colour, with a dark keyline
+   inside and out so it reads on every status fill. */
+.ring-slot { flex: none; width: 22px; height: 24px; display: grid; place-items: center; }
+.ring {
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 2.5px solid var(--ring);
+  background: rgba(0, 0, 0, 0.14);
+  box-shadow: 0 0 0 1px var(--ring-keyline),
+              inset 0 0 0 1px var(--ring-keyline),
+              0 0 6px 1px var(--ring),
+              0 0 14px 3px color-mix(in srgb, var(--ring) 55%, transparent);
+  transition: transform var(--dur-move) var(--ease-out), opacity var(--dur-fast) ease;
+}
+.ring[data-priority="high"] { --ring: var(--priority-high); }
+.ring[data-priority="medium"] { --ring: var(--priority-medium); }
+.ring:not([data-priority]) { opacity: 0; transform: scale(0.4); }
+
+.notes-btn { margin-left: 8px; position: relative; }
+.notes-btn.has-notes::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 0 1.5px var(--fill), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Drag handle, in the row's left padding while drag order applies */
+.grip {
+  position: absolute; left: 1px; top: 50%; translate: 0 -50%;
+  width: 14px; height: 22px; display: none; place-items: center;
+  color: var(--on-fill-dim); opacity: 0;
+  cursor: grab; transition: opacity var(--dur-fast) ease;
+}
+#pane.can-drag .row { padding-left: 16px; }
+#pane.can-drag .grip { display: grid; }
+.row:hover .grip { opacity: 0.85; }
+
+/* ─── Notes, attached under the row ──────────────────────────────────────── */
+.task.notes-open > .row {
+  border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;
+}
+.notes {
+  position: relative;
+  margin-top: 2px;
+  border-radius: 4px 4px var(--radius-row) var(--radius-row);
+  background: var(--notes-bg);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  box-shadow: inset 3px 0 0 var(--fill), inset 0 0 0 1px var(--hairline);
+  padding: 30px 12px 14px 14px;
+  min-height: 72px;
+  animation: notes-in var(--dur-move) var(--ease-out);
+}
+@keyframes notes-in {
+  from { opacity: 0; clip-path: inset(0 0 100% 0 round 4px); }
+  to { opacity: 1; clip-path: inset(0 0 0 0 round 4px); }
+}
+.notes-close {
+  position: absolute; top: 5px; left: 7px;
+  width: 22px; height: 22px; border-radius: 50%;
+  color: var(--text-dim);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.notes-close:hover { background: var(--surface-hover); color: var(--text); }
+.notes-close svg { width: 13px; height: 13px; }
+.notes-label {
+  position: absolute; top: 9px; left: 34px;
+  font-size: 11px; font-weight: 600; color: var(--text-dim);
+}
+.notes textarea {
+  display: block; width: 100%; height: 100%;
+  resize: none; border: 0; outline: none; background: transparent;
+  color: var(--text); font: inherit; font-size: 12.5px; line-height: 1.45;
+  user-select: text;
+}
+.notes textarea::placeholder { color: var(--text-faint); }
+.notes-resize {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 10px;
+  cursor: ns-resize;
+}
+.notes-resize::before {   /* centre grabber */
+  content: ''; position: absolute; left: 50%; bottom: 4px; translate: -50% 0;
+  width: 30px; height: 3px; border-radius: 2px; background: var(--text-faint);
+}
+.notes-resize::after {    /* corner grip */
+  content: ''; position: absolute; right: 4px; bottom: 4px;
+  width: 9px; height: 9px;
+  background: linear-gradient(135deg, transparent 45%, var(--text-faint) 45% 55%, transparent 55% 70%, var(--text-faint) 70% 80%, transparent 80%);
+}
+
+/* ─── Compact layout ─────────────────────────────────────────────────────── */
+#todo-tab { display: none; }
+#pane.compact #main { grid-template-columns: minmax(0, 1fr); }
+#pane.compact #todo {
+  position: absolute; top: 0; right: 10px; bottom: 12px;
+  width: min(300px, 86%);
+  z-index: 20;
+  background: var(--popover-bg);
+  -webkit-backdrop-filter: var(--popover-blur); backdrop-filter: var(--popover-blur);
+  border-radius: 14px;
+  box-shadow: var(--popover-shadow), inset 0 0 0 1px var(--popover-border);
+  transform: translateX(calc(100% + 24px));
+  transition: transform var(--dur-move) var(--ease-out);
+}
+#pane.compact.todo-open #todo { transform: none; }
+#pane.compact #todo-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: absolute; right: 0; top: 50%; translate: 0 -50%;
+  z-index: 15;
+  padding: 12px 3px;
+  writing-mode: vertical-rl;
+  border-radius: 10px 0 0 10px;
+  background: var(--status-todo); color: var(--on-fill);
+  font-size: 11px; font-weight: 650; text-shadow: var(--on-fill-shadow);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: transform var(--dur-move) var(--ease-out), opacity var(--dur-fast) ease;
+}
+#todo-tab .count { color: var(--on-fill-dim); }
+#todo-tab.bump { animation: bump 420ms var(--ease-out); }
+@keyframes bump { 40% { transform: translateX(-5px) scale(1.06); } }
+#pane.compact.todo-open #todo-tab { opacity: 0; pointer-events: none; }
+/* Room on the right for the tab, so it never sits on a row */
+#pane.compact #main { padding-right: 34px; }
+
+/* Row controls collapse into "…", shown on hover */
+#pane.compact .edit-group { display: none; }
+#pane.compact .ctl.more { display: grid; opacity: 0; transition: opacity var(--dur-fast) ease; }
+#pane.compact .row:hover .ctl.more,
+#pane.compact .row.selected .ctl.more,
+#pane.compact .ctl.more.open { opacity: 1; }
+/* A panel too narrow for the full set (a small expanded window's To Do)
+   collapses its rows the same way, so the text keeps room to breathe. */
+@container (max-width: 300px) {
+  .edit-group { display: none; }
+  .ctl.more { display: grid; opacity: 0; transition: opacity var(--dur-fast) ease; }
+  .row:hover .ctl.more, .row.selected .ctl.more, .ctl.more.open { opacity: 1; }
+}
+
+/* ─── Popovers (status, priority, "…") ───────────────────────────────────── */
+#popover-layer { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
+.popover {
+  position: absolute; pointer-events: auto;
+  min-width: 168px; padding: 5px;
+  border-radius: var(--radius-popover);
+  background: var(--popover-bg);
+  -webkit-backdrop-filter: var(--popover-blur); backdrop-filter: var(--popover-blur);
+  border: 1px solid var(--popover-border);
+  box-shadow: var(--popover-shadow);
+  color: var(--text);
+  animation: pop-in 160ms var(--ease-out);
+}
+.popover.closing { animation: pop-out 110ms ease forwards; }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.94) translateY(-4px); } }
+@keyframes pop-out { to { opacity: 0; transform: scale(0.97); } }
+.pop-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; height: 28px; padding: 0 9px;
+  border-radius: 8px;
+  font-size: 13px; text-align: left; justify-content: flex-start;
+}
+.pop-item:hover, .pop-item.active { background: var(--surface-hover); }
+.pop-item .check { margin-left: auto; color: var(--text-dim); }
+.pop-item.danger { color: var(--danger); }
+.pop-item svg { color: var(--text-dim); }
+.pop-item.danger svg { color: var(--danger); }
+.pop-label { padding: 6px 9px 3px; font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.pop-sep { height: 1px; background: var(--hairline); margin: 4px 6px; }
+.swatch { width: 13px; height: 13px; border-radius: 50%; flex: none; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.swatch.ring-sw {
+  background: transparent; border: 2.5px solid var(--sw);
+  box-shadow: 0 0 6px var(--sw);
+}
+.swatch.none { background: transparent; border: 1.5px dashed var(--text-faint); box-shadow: none; }
+
+/* ─── Toast ──────────────────────────────────────────────────────────────── */
+#toasts {
+  position: absolute; left: 50%; bottom: 16px; translate: -50% 0;
+  z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: var(--popover-bg);
+  -webkit-backdrop-filter: var(--popover-blur); backdrop-filter: var(--popover-blur);
+  border: 1px solid var(--popover-border);
+  box-shadow: var(--popover-shadow);
+  font-size: 12.5px; white-space: nowrap;
+  animation: toast-in 220ms var(--ease-out);
+}
+.toast.closing { animation: toast-out 160ms ease forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.96); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(6px); } }
+.toast button {
+  padding: 4px 11px; border-radius: 999px;
+  color: var(--accent); font-weight: 650;
+}
+.toast button:hover { background: var(--surface-hover); }
+
+/* ─── Drag and drop ──────────────────────────────────────────────────────── */
+.task.dragging {
+  position: fixed; z-index: 90; pointer-events: none;
+  margin: 0;
+}
+.task.dragging > .row {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 10px 28px rgba(0, 0, 0, 0.32);
+  transform: scale(1.02);
+}
+.drop-placeholder {
+  border-radius: var(--radius-row);
+  border: 1.5px dashed var(--text-faint);
+  background: var(--surface);
+}
+#pane.dragging, #pane.dragging * { cursor: grabbing !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

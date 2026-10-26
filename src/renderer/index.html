@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>ClearDay</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="pane" class="no-glass instant">
+  <canvas id="glass"></canvas>
+
+  <header id="header">
+    <div class="date">
+      <span id="date"></span>
+      <span id="weekday"></span>
+    </div>
+    <div class="header-actions">
+      <button id="sort-btn" class="icon-btn" title="Sort" aria-label="Sort"></button>
+      <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings"></button>
+    </div>
+  </header>
+
+  <form id="add" autocomplete="off">
+    <input id="add-input" type="text" placeholder="Add a task…" spellcheck="false" aria-label="New task">
+    <button id="add-btn" type="submit" title="Add task (Enter)" aria-label="Add task"></button>
+  </form>
+
+  <main id="main">
+    <section id="board" class="panel" aria-label="Board">
+      <div id="sections"></div>
+      <div id="board-empty" class="empty">Nothing on the board yet.<br>Set a task to In Progress to start your day.</div>
+    </section>
+
+    <aside id="todo" class="panel" aria-label="To Do">
+      <div class="panel-head">
+        <span class="dot" data-status="todo"></span>
+        <span class="title">To Do</span>
+        <span class="count"></span>
+      </div>
+      <div class="list" data-status="todo"></div>
+      <div class="empty">Nothing to do.</div>
+    </aside>
+
+    <button id="todo-tab" title="To Do" aria-label="Show To Do">
+      <span class="title">To Do</span>
+      <span class="count"></span>
+    </button>
+  </main>
+
+  <div id="toasts" aria-live="polite"></div>
+</div>
+<div id="popover-layer"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
