@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.1 — 2026-10-27
+
+- **The blur behind the window actually shows.** macOS only blurs behind a
+  frameless window that keeps a hidden title bar, so the window now uses one.
+  Before this fix the background was see-through but never blurred.
+- **Blur style** in Preferences: Subtle, Frosted (the default) or Vivid.
+- **Lower default background opacity** (Light 35%, Dark 45%), so the blur can
+  be seen. Opacity you set yourself is kept.
+- **Plain text in Light mode:** black headings with no white highlight under
+  them. In Dark mode the glow behind text is gone.
+- Window corners match macOS's own.
+
 ## v0.2.0 — 2026-10-27
 
 - **Preferences**, from the gear or ⌘,:

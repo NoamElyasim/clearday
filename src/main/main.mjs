@@ -16,6 +16,8 @@ import { SORTS, SORT_LABELS, SCHEMA_VERSION } from '../shared/model.mjs';
 const DIR = import.meta.dirname;
 const DEFAULT_SIZE = { width: 780, height: 560 };
 const MIN_SIZE = { width: 320, height: 360 };
+// Preferences → Blur style: which macOS material sits behind the board.
+const MATERIALS = { subtle: 'under-window', frosted: 'popover', vivid: 'sidebar' };
 // Preferences → Text size, as page zoom so every part of the UI scales together.
 const ZOOM = { small: 0.9, medium: 1, large: 1.12 };
 
@@ -51,12 +53,15 @@ function createWindow() {
     ...restoreBounds(settings.get('bounds')),
     minWidth: MIN_SIZE.width,
     minHeight: MIN_SIZE.height,
-    frame: false,
+    // A hidden title bar rather than frame: false. macOS only draws vibrancy
+    // behind a frameless window when it keeps a (hidden) title bar; with
+    // frame: false the background was see-through but never blurred.
+    titleBarStyle: 'hidden',
     transparent: true,
     // The desktop behind the window is blurred by macOS (unless turned off in
     // Preferences); the board's own background (theme.css, opacity from
     // Preferences) is drawn over it.
-    vibrancy: settings.get('blur') ? 'under-window' : undefined,
+    vibrancy: settings.get('blur') ? MATERIALS[settings.get('blurStyle')] : undefined,
     visualEffectState: 'active',
     resizable: true,
     hasShadow: true,
@@ -72,6 +77,8 @@ function createWindow() {
     },
   });
   if (settings.get('alwaysOnTop')) win.setAlwaysOnTop(true, 'floating');
+  // No traffic lights: the board's header is the whole chrome.
+  win.setWindowButtonVisibility(false);
 
   win.loadFile(path.join(DIR, '..', 'renderer', 'index.html'));
   // Renderer errors would otherwise vanish in a dev run.
@@ -146,7 +153,7 @@ function applyLoginItem() {
 }
 
 function applyBlur() {
-  if (win && !win.isDestroyed()) win.setVibrancy(settings.get('blur') ? 'under-window' : null);
+  if (win && !win.isDestroyed()) win.setVibrancy(settings.get('blur') ? MATERIALS[settings.get('blurStyle')] : null);
 }
 
 function applyTextSize() {
@@ -176,7 +183,7 @@ function applySetting(keys) {
   if (keys.includes('alwaysOnTop')) applyAlwaysOnTop();
   if (keys.includes('showIn')) applyShowIn();
   if (keys.includes('textSize')) applyTextSize();
-  if (keys.includes('blur')) applyBlur();
+  if (keys.includes('blur') || keys.includes('blurStyle')) applyBlur();
   if (win && !win.isDestroyed() && keys.length) win.webContents.send('settings', settings.all());
 }
 

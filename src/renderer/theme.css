@@ -32,7 +32,7 @@
   /* ── Shape and type (from the widget) ── */
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   --ui-scale: 1;                   /* Preferences → Text size */
-  --radius-window: 20px;
+  --radius-window: 10px;           /* macOS's own window corner, so the blur and the board's edge meet */
   --radius-row: 12px;
   --radius-popover: 14px;
   --radius-control: 7px;
@@ -56,7 +56,7 @@
   --text-faint: rgba(255, 255, 255, 0.45);
   /* The widget's label shadow: the dark half carries legibility over a light
      backdrop, the white glow lifts it off a dark one. */
-  --text-shadow: 0 0 10px rgba(255, 255, 255, 0.25), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 
   --surface: rgba(255, 255, 255, 0.12);          /* inputs, empty states */
   --surface-hover: rgba(255, 255, 255, 0.22);    /* the widget's menu-button hover */
@@ -91,10 +91,11 @@
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
-    --text: rgba(20, 20, 24, 0.92);
-    --text-dim: rgba(20, 20, 24, 0.62);
-    --text-faint: rgba(20, 20, 24, 0.40);
-    --text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+    /* Plain black on light: no highlight under the text */
+    --text: #111113;
+    --text-dim: rgba(0, 0, 0, 0.58);
+    --text-faint: rgba(0, 0, 0, 0.38);
+    --text-shadow: none;
 
     --surface: rgba(255, 255, 255, 0.45);
     --surface-hover: rgba(255, 255, 255, 0.70);

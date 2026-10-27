@@ -18,10 +18,11 @@ const DEFAULTS = {
   openAtLogin: true,
   bounds: null,         // { x, y, width, height } in DIP, restored on launch
   // Preferences → Appearance
-  bgOpacityLight: 0.70, // window background opacity, 0–1, per appearance
-  bgOpacityDark: 0.75,
+  bgOpacityLight: 0.35, // window background opacity, 0–1, per appearance
+  bgOpacityDark: 0.45,
   textSize: 'medium',   // 'small' | 'medium' | 'large'
   blur: true,           // system blur of the desktop behind the window
+  blurStyle: 'frosted', // 'subtle' | 'frosted' | 'vivid' (main.mjs MATERIALS)
   showWeekday: true,
   // Preferences → Behavior
   spellcheckNotes: true,
@@ -41,6 +42,7 @@ const VALID = {
   bgOpacityDark: fraction,
   textSize: (v) => ['small', 'medium', 'large'].includes(v),
   blur: (v) => typeof v === 'boolean',
+  blurStyle: (v) => ['subtle', 'frosted', 'vivid'].includes(v),
   showWeekday: (v) => typeof v === 'boolean',
   spellcheckNotes: (v) => typeof v === 'boolean',
   sidePanel: (v) => ['todo', 'ongoing'].includes(v),
@@ -52,7 +54,14 @@ export function all() {
   if (cache) return cache;
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (_) {}
-  cache = { ...DEFAULTS };
+  // v0.2.0 saved its opacity defaults (0.70 / 0.75) along with everything
+  // else. They were picked before the blur actually showed, and hide it, so
+  // untouched ones move to the new defaults.
+  if (!saved.settingsVersion) {
+    if (saved.bgOpacityLight === 0.7) delete saved.bgOpacityLight;
+    if (saved.bgOpacityDark === 0.75) delete saved.bgOpacityDark;
+  }
+  cache = { ...DEFAULTS, settingsVersion: 2 };
   for (const k of Object.keys(DEFAULTS)) if (k in saved && VALID[k](saved[k])) cache[k] = saved[k];
   return cache;
 }

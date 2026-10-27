@@ -13,7 +13,7 @@
 .prefs-sheet {
   position: absolute; inset: 8px;
   display: flex; flex-direction: column;
-  border-radius: calc(var(--radius-window) - 6px);
+  border-radius: 8px;
   background: var(--sheet-bg);
   -webkit-backdrop-filter: var(--popover-blur); backdrop-filter: var(--popover-blur);
   box-shadow: var(--popover-shadow), inset 0 0 0 1px var(--popover-border);

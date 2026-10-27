@@ -1,7 +1,7 @@
 {
   "name": "clearday",
   "productName": "ClearDay",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A compact, Monday-style daily task board that floats on your Mac desktop",
   "main": "src/main/main.mjs",
   "license": "MIT",
